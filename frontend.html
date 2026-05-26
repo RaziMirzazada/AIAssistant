@@ -1,0 +1,1146 @@
+<!doctype html>
+<html lang="az">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Köməkçi V3 — Təkmilləşdirilmiş Versiya</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2128;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-soft: rgba(88, 166, 255, 0.12);
+    --green: #3fb950;
+    --red: #f85149;
+    --amber: #d29922;
+  }
+  html, body { background: var(--bg); color: var(--text); height: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  .panel { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .btn { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-weight: 500; transition: all .15s; }
+  .btn:hover { background: rgba(88,166,255,.22); }
+  .btn-primary { background: var(--accent); color: #0d1117; border: none; }
+  .btn-primary:hover { background: #79b8ff; }
+  .btn-danger { background: rgba(248,81,73,.12); color: var(--red); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }
+  .btn-danger:hover { background: rgba(248,81,73,.22); }
+  .input { background: #0d1117; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; width: 100%; }
+  .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(88,166,255,.25); }
+
+  /* Top nav */
+  .topnav { background: var(--panel); border-bottom: 1px solid var(--border); }
+  .navtab { padding: 10px 16px; border-radius: 6px; cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 500; transition: all .15s; }
+  .navtab:hover { color: var(--text); background: var(--panel-2); }
+  .navtab.active { color: var(--accent); background: var(--accent-soft); }
+
+  .mode-card { border: 1px solid var(--border); border-radius: 8px; padding: 14px; cursor: pointer; background: var(--panel-2); transition: all .15s; }
+  .mode-card:hover { border-color: var(--accent); }
+  .mode-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: var(--accent-soft); }
+
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .dot.red   { background: var(--red);   box-shadow: 0 0 8px var(--red); }
+  .dot.amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+
+  .bubble { border-radius: 10px; padding: 12px 14px; line-height: 1.55; max-width: 920px; }
+  .bubble.user { background: var(--accent-soft); border: 1px solid var(--border); margin-left: auto; }
+  .bubble.bot  { background: var(--panel-2); border: 1px solid var(--border); }
+  .cursor { display: inline-block; width: 8px; animation: blink 1s steps(2) infinite; color: var(--accent); }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .dropzone { border: 2px dashed var(--border); border-radius: 8px; padding: 36px; text-align: center; color: var(--muted); transition: all .15s; }
+  .dropzone.drag { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  details > summary { cursor: pointer; color: var(--accent); list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details[open] > summary .arrow { transform: rotate(90deg); }
+  .arrow { display: inline-block; transition: transform .15s; }
+  pre { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .markdown p { margin: 0.45em 0; }
+  .markdown ul, .markdown ol { margin: 0.45em 0 0.45em 1.25em; }
+  .markdown h1, .markdown h2, .markdown h3 { color: var(--text); margin-top: .6em; font-weight: 600; }
+  .markdown a { color: var(--accent); }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel); border: 1px solid var(--border); padding: 10px 14px; border-radius: 8px; z-index: 9999; }
+
+  /* Screens */
+  .screen { display: none; }
+  .screen.active { display: flex; }
+
+  /* Lang select */
+  .lang-select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  .lang-select:focus { outline: none; border-color: var(--accent); }
+</style>
+</head>
+<body class="h-screen flex flex-col">
+
+<!-- ============ TOP NAVIGATION ============ -->
+<header class="topnav flex items-center px-5 py-2 gap-4">
+  <div class="flex items-center gap-2 mr-4">
+    <span class="text-lg font-semibold">🧠 AI <span data-i18n="app_name">Köməkçi</span> <span style="color: var(--accent);">V3</span></span>
+  </div>
+
+  <nav class="flex items-center gap-1">
+    <button class="navtab active" data-screen="chat">
+      <span data-i18n="nav_chat">💬 Söhbət</span>
+    </button>
+    <button class="navtab" data-screen="sources">
+      <span data-i18n="nav_sources">📁 Mənbələr</span>
+    </button>
+    <button class="navtab" data-screen="settings">
+      <span data-i18n="nav_settings">⚙ Tənzimləmələr</span>
+    </button>
+  </nav>
+
+  <div class="ml-auto flex items-center gap-3">
+    <div class="flex items-center gap-2">
+      <label class="text-xs" data-i18n="lang_label" style="color: var(--muted);">Dil</label>
+      <select id="langSelect" class="lang-select">
+        <option value="az">🇦🇿 Azərbaycanca</option>
+        <option value="en">🇬🇧 English</option>
+        <option value="ru">🇷🇺 Русский</option>
+      </select>
+    </div>
+    <div class="flex items-center gap-2">
+      <label class="text-xs" data-i18n="api_key_short" style="color: var(--muted);">API açarı</label>
+      <input id="apiKey" type="password" class="input" style="width: 200px;" data-i18n-ph="api_key_ph" placeholder="X-API-KEY" />
+    </div>
+  </div>
+</header>
+
+<!-- ============ MAIN SCREENS ============ -->
+<main class="flex-1 overflow-hidden">
+
+  <!-- ============ CHAT SCREEN ============ -->
+  <section data-screen-panel="chat" class="screen active flex-col h-full">
+    <div class="px-6 py-3 border-b flex items-center justify-between" style="border-color: var(--border); background: var(--panel);">
+      <div>
+        <div class="text-base font-semibold" data-i18n="chat_title">Söhbət</div>
+        <div class="text-xs" style="color: var(--muted);">
+          <span id="modeIndicator" data-i18n="mode_indicator_offline">🔒 Oflayn rejim aktivdir</span>
+          · <span data-i18n="session_label">Sessiya</span>: <span id="sessionLabel"></span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btnAbort" class="btn-danger hidden" data-i18n="btn_abort">⏹ Dayandır</button>
+        <button id="btnClearChat" class="btn" data-i18n="btn_clear_chat">🗑 Söhbəti təmizlə</button>
+      </div>
+    </div>
+
+    <div id="chat" class="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+      <div class="bubble bot markdown">
+        <p data-i18n="greeting">
+          Salam! Mən <b>AI Köməkçi V3</b>-əm. Sənədləri <b>“Mənbələr”</b> səhifəsindən əlavə edin və suallarınızı verin — cavabları bilik bazanıza əsasən hazırlayacağam.
+        </p>
+        <p class="text-xs mt-2" style="color: var(--muted);" data-i18n="pipeline_note">
+          Sorğularınız daxili emal üçün İngilis dilinə tərcümə olunur, axtarış və LLM ingiliscə işləyir, cavab isə yenidən sizin seçdiyiniz dilə qaytarılır.
+        </p>
+      </div>
+    </div>
+
+    <div class="border-t p-4" style="border-color: var(--border); background: var(--panel);">
+      <div class="flex items-end gap-2 max-w-[1100px] mx-auto">
+        <textarea id="prompt" class="input" rows="2"
+                  data-i18n-ph="prompt_ph"
+                  placeholder="Sualınızı yazın... (Enter — göndər, Shift+Enter — yeni sətir)"></textarea>
+        <button id="btnSend" class="btn-primary px-5 py-3 rounded-md font-semibold" data-i18n="btn_send">➤ Göndər</button>
+      </div>
+      <div class="text-[11px] mt-2 text-center" style="color: var(--muted);" data-i18n="footer_hint">
+        ⚠ X-API-KEY tələb olunur. Cavabdakı [Source #N] etiketləri genişlənə bilən mənbə panelini açır.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SOURCES SCREEN ============ -->
+  <section data-screen-panel="sources" class="screen flex-col h-full overflow-y-auto">
+    <div class="max-w-[1100px] mx-auto w-full px-6 py-6 space-y-6">
+
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-semibold" data-i18n="sources_page_title">Bilik Bazası — Mənbələr</h1>
+          <p class="text-sm mt-1" style="color: var(--muted);" data-i18n="sources_page_sub">
+            PDF, URL və ya birbaşa mətn əlavə edin. Bütün məzmun yerli ChromaDB-yə yazılır və yenidən başlatdıqda yüklənir.
+          </p>
+        </div>
+        <button id="btnRefreshSources" class="btn" data-i18n="btn_refresh">↻ Yenilə</button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Upload card -->
+        <div class="panel p-4">
+          <div class="text-sm font-medium mb-3" data-i18n="sources_upload_title">📄 PDF və ya mətn faylı yüklə</div>
+          <div id="dropzone" class="dropzone">
+            <div class="text-3xl mb-2">📥</div>
+            <div class="text-sm">
+              <span data-i18n="dropzone_main">Faylı bura sürüşdürün</span><br/>
+              <span style="color: var(--muted);" data-i18n="dropzone_sub">və ya seçmək üçün klikləyin</span>
+            </div>
+            <input id="fileInput" type="file" accept="application/pdf,.txt,.md" class="hidden" />
+          </div>
+          <div class="text-[11px] mt-2" style="color: var(--muted);" data-i18n="dropzone_hint">
+            Dəstəklənən formatlar: PDF, TXT, Markdown.
+          </div>
+        </div>
+
+        <!-- URL card -->
+        <div class="panel p-4">
+          <div class="text-sm font-medium mb-3" data-i18n="sources_url_title">🌐 URL-dən əlavə et</div>
+          <input id="urlInput" class="input mb-2" placeholder="https://..." />
+          <input id="urlTitle" class="input mb-3" data-i18n-ph="url_title_ph" placeholder="Başlıq (istəyə bağlı)" />
+          <button id="btnAddUrl" class="btn w-full" data-i18n="btn_add_url">🌐 URL əlavə et</button>
+          <div class="text-[11px] mt-2" style="color: var(--muted);" data-i18n="url_hint">
+            HTML və PDF səhifələri avtomatik təmizlənir.
+          </div>
+        </div>
+
+        <!-- Text card -->
+        <div class="panel p-4">
+          <div class="text-sm font-medium mb-3" data-i18n="sources_text_title">✍ Birbaşa mətn əlavə et</div>
+          <input id="textTitle" class="input mb-2" data-i18n-ph="text_title_ph" placeholder="Başlıq" />
+          <textarea id="textBody" class="input mb-3" rows="5" data-i18n-ph="text_body_ph" placeholder="Mətn məzmunu..."></textarea>
+          <button id="btnAddText" class="btn w-full" data-i18n="btn_add_text">✍ Mətn əlavə et</button>
+        </div>
+      </div>
+
+      <div class="panel p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-sm font-medium" data-i18n="sources_list_title">📚 Əlavə edilmiş mənbələr</div>
+          <div class="text-xs" style="color: var(--muted);">
+            <span id="srcStatCount">0</span> <span data-i18n="sources_count_word">mənbə</span> ·
+            <span id="srcStatChunks">0</span> <span data-i18n="chunks_word">parça</span>
+          </div>
+        </div>
+        <div id="sourcesList" class="space-y-2 text-sm">
+          <div style="color: var(--muted);" class="text-xs" data-i18n="sources_loading">Yüklənir...</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS SCREEN ============ -->
+  <section data-screen-panel="settings" class="screen flex-col h-full overflow-y-auto">
+    <div class="max-w-[900px] mx-auto w-full px-6 py-6 space-y-6">
+
+      <div>
+        <h1 class="text-2xl font-semibold" data-i18n="settings_page_title">Tənzimləmələr</h1>
+        <p class="text-sm mt-1" style="color: var(--muted);" data-i18n="settings_page_sub">
+          İş rejimini, bulud provayderini və məxfilik parametrlərini buradan idarə edin.
+        </p>
+      </div>
+
+      <!-- Mode -->
+      <div class="space-y-3">
+        <div class="text-xs uppercase tracking-wide" style="color: var(--muted);" data-i18n="mode_section_title">İş Rejimi</div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="mode-card active" data-mode="offline">
+            <div class="font-medium" data-i18n="mode_offline_title">🔒 Oflayn Rejim</div>
+            <div class="text-xs mt-1" style="color: var(--muted);" data-i18n="mode_offline_sub">
+              Yerli Ollama · qwen2.5:14b · İnternet tələb etmir
+            </div>
+          </div>
+          <div class="mode-card" data-mode="online">
+            <div class="font-medium" data-i18n="mode_online_title">🌐 Onlayn Rejim</div>
+            <div class="text-xs mt-1" style="color: var(--muted);" data-i18n="mode_online_sub">
+              Bulud LLM — Gemini 2.5 Flash və ya Grok-2
+            </div>
+          </div>
+          <div class="mode-card" data-mode="secret">
+            <div class="font-medium" data-i18n="mode_secret_title">🤫 Məxfi Rejim</div>
+            <div class="text-xs mt-1" style="color: var(--muted);" data-i18n="mode_secret_sub">
+              Yerli psevdonimləşdirmə + AES-256 şifrələmə, sonra bulud
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Provider -->
+      <div class="panel p-4">
+        <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--muted);" data-i18n="provider_section">Bulud Provayderi</div>
+        <div class="flex gap-4">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name="provider" value="gemini" checked> Gemini 2.5 Flash
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name="provider" value="grok"> Grok-2
+          </label>
+        </div>
+      </div>
+
+      <!-- Secret keywords -->
+      <div class="panel p-4">
+        <div class="text-xs uppercase tracking-wide mb-2" style="color: var(--muted);" data-i18n="keywords_section">
+          Məxfi açar sözlər (vergüllə ayırın)
+        </div>
+        <input id="secretKeywords" class="input" data-i18n-ph="keywords_ph" placeholder="məs.: layihə-A, daxili-kod" />
+        <div class="text-[11px] mt-2" style="color: var(--muted);" data-i18n="keywords_hint">
+          Bu sözlər Məxfi Rejimdə buluda göndərilməzdən əvvəl yerli olaraq maskalanır.
+        </div>
+      </div>
+
+      <!-- Session -->
+      <div class="panel p-4 flex items-center justify-between gap-3">
+        <div>
+          <div class="text-sm" data-i18n="session_block_title">Sessiya yaddaşı</div>
+          <div class="text-xs" style="color: var(--muted);">
+            <span data-i18n="session_block_sub">Son 5 söhbət növbəsi LLM kontekstində saxlanılır.</span>
+            <span class="ml-1">ID: <code id="settingsSessionId"></code></span>
+          </div>
+        </div>
+        <button id="btnResetSession" class="btn" data-i18n="btn_reset_session">🧹 Yaddaşı sıfırla</button>
+      </div>
+
+      <!-- System status -->
+      <div class="panel p-4">
+        <div class="text-xs uppercase tracking-wide mb-3" style="color: var(--muted);" data-i18n="system_section">Canlı Vəziyyət</div>
+        <div class="grid grid-cols-2 gap-3 text-sm">
+          <div class="flex items-center justify-between"><span data-i18n="st_db">💾 ChromaDB</span><span class="dot amber" id="stDb"></span></div>
+          <div class="flex items-center justify-between"><span data-i18n="st_ollama">🦙 Ollama (yerli)</span><span class="dot amber" id="stOllama"></span></div>
+          <div class="flex items-center justify-between"><span data-i18n="st_gemini">✨ Gemini API</span><span class="dot amber" id="stGemini"></span></div>
+          <div class="flex items-center justify-between"><span data-i18n="st_grok">🤖 Grok API</span><span class="dot amber" id="stGrok"></span></div>
+        </div>
+        <div id="statsBox" class="text-xs space-y-1 mt-3 pt-3 border-t" style="color: var(--muted); border-color: var(--border);">
+          <span data-i18n="stats_loading">Statistika yüklənir...</span>
+        </div>
+        <button id="btnRefreshHealth" class="btn w-full text-sm mt-3" data-i18n="btn_refresh_health">↻ Vəziyyəti yenilə</button>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+//============================================================================
+// i18n dictionary (AZ / EN / RU)
+//============================================================================
+const I18N = {
+  az: {
+    app_name: "Köməkçi",
+    lang_label: "Dil",
+    api_key_short: "API açarı",
+    api_key_ph: "X-API-KEY açarınız",
+
+    nav_chat: "💬 Söhbət",
+    nav_sources: "📁 Mənbələr",
+    nav_settings: "⚙ Tənzimləmələr",
+
+    chat_title: "Söhbət",
+    session_label: "Sessiya",
+    btn_abort: "⏹ Dayandır",
+    btn_clear_chat: "🗑 Söhbəti təmizlə",
+    btn_send: "➤ Göndər",
+    prompt_ph: "Sualınızı yazın... (Enter — göndər, Shift+Enter — yeni sətir)",
+    footer_hint: "⚠ X-API-KEY tələb olunur. Cavabdakı [Source #N] etiketləri genişlənə bilən mənbə panelini açır.",
+    greeting: "Salam! Mən <b>AI Köməkçi V3</b>-əm. Sənədləri <b>“Mənbələr”</b> səhifəsindən əlavə edin və suallarınızı verin — cavabları bilik bazanıza əsasən hazırlayacağam.",
+    pipeline_note: "Sorğularınız daxili emal üçün İngilis dilinə tərcümə olunur, axtarış və LLM ingiliscə işləyir, cavab isə yenidən sizin seçdiyiniz dilə qaytarılır.",
+
+    mode_indicator_offline: "🔒 Oflayn rejim aktivdir",
+    mode_indicator_online:  "🌐 Onlayn rejim aktivdir",
+    mode_indicator_secret:  "🤫 Məxfi rejim aktivdir",
+
+    sources_page_title: "Bilik Bazası — Mənbələr",
+    sources_page_sub: "PDF, URL və ya birbaşa mətn əlavə edin. Bütün məzmun yerli ChromaDB-yə yazılır və proqram yenidən başladıldıqda avtomatik yüklənir.",
+    sources_upload_title: "📄 PDF və ya mətn faylı yüklə",
+    dropzone_main: "Faylı bura sürüşdürün",
+    dropzone_sub: "və ya seçmək üçün klikləyin",
+    dropzone_hint: "Dəstəklənən formatlar: PDF, TXT, Markdown.",
+    sources_url_title: "🌐 URL-dən əlavə et",
+    url_title_ph: "Başlıq (istəyə bağlı)",
+    btn_add_url: "🌐 URL əlavə et",
+    url_hint: "HTML səhifələrindəki menyu/footer avtomatik təmizlənir, PDF linkləri də qəbul olunur.",
+    sources_text_title: "✍ Birbaşa mətn əlavə et",
+    text_title_ph: "Başlıq",
+    text_body_ph: "Mətn məzmunu...",
+    btn_add_text: "✍ Mətn əlavə et",
+    sources_list_title: "📚 Əlavə edilmiş mənbələr",
+    sources_count_word: "mənbə",
+    chunks_word: "parça",
+    sources_loading: "Yüklənir...",
+    sources_empty: "Hələ heç bir mənbə əlavə edilməyib.",
+    btn_refresh: "↻ Yenilə",
+    btn_delete: "Sil",
+    confirm_delete: "Bu mənbəni silmək istədiyinizə əminsiniz?",
+
+    settings_page_title: "Tənzimləmələr",
+    settings_page_sub: "İş rejimini, bulud provayderini və məxfilik parametrlərini buradan idarə edin.",
+    mode_section_title: "İş Rejimi",
+    mode_offline_title: "🔒 Oflayn Rejim",
+    mode_offline_sub: "Yerli Ollama · qwen2.5:14b · İnternet tələb etmir",
+    mode_online_title: "🌐 Onlayn Rejim",
+    mode_online_sub: "Bulud LLM — Gemini 2.5 Flash və ya Grok-2",
+    mode_secret_title: "🤫 Məxfi Rejim",
+    mode_secret_sub: "Yerli psevdonimləşdirmə + AES-256 şifrələmə, sonra bulud",
+    provider_section: "Bulud Provayderi",
+    keywords_section: "Məxfi açar sözlər (vergüllə ayırın)",
+    keywords_ph: "məs.: layihə-A, daxili-kod",
+    keywords_hint: "Bu sözlər Məxfi Rejimdə buluda göndərilməzdən əvvəl yerli olaraq maskalanır.",
+    session_block_title: "Sessiya yaddaşı",
+    session_block_sub: "Son 5 söhbət növbəsi LLM kontekstində saxlanılır.",
+    btn_reset_session: "🧹 Yaddaşı sıfırla",
+    system_section: "Canlı Vəziyyət",
+    st_db: "💾 ChromaDB",
+    st_ollama: "🦙 Ollama (yerli)",
+    st_gemini: "✨ Gemini API",
+    st_grok: "🤖 Grok API",
+    stats_loading: "Statistika yüklənir...",
+    btn_refresh_health: "↻ Vəziyyəti yenilə",
+
+    // dynamic
+    toast_missing_key: "API açarı tələb olunur.",
+    uploading: "“{name}” yüklənir...",
+    source_added: "Mənbə əlavə edildi.",
+    upload_failed: "Yükləmə uğursuz oldu",
+    url_added: "URL əlavə edildi.",
+    url_failed: "URL əlavə edilə bilmədi",
+    title_text_required: "Başlıq və mətn tələb olunur.",
+    text_added: "Mətn əlavə edildi.",
+    add_failed: "Əlavə etmək mümkün olmadı",
+    deleted: "Silindi.",
+    delete_failed: "Silmə uğursuz oldu",
+    memory_reset: "Yaddaş sıfırlandı.",
+    reset_failed: "Sıfırlama uğursuz oldu",
+    chat_cleared: "Söhbət təmizləndi.",
+    save_default_title_prefix: "Söhbət cavabı",
+    btn_save_kb: "💾 Bilik bazasına saxla",
+    saving_status: "Saxlanılır...",
+    saved_status: "✓ Saxlandı",
+    save_failed: "Saxlama uğursuz oldu",
+    saved_toast: "Bilik bazasına saxlanıldı.",
+    translating: "İngilis dilinə tərcümə olunur...",
+    streaming: "Cavab yaradılır...",
+    english_query: "İngilis dilində sorğu",
+    live_english: "🌐 Canlı axın (İngiliscə)",
+    error_label: "Xəta",
+    aborted_label: "⏹ İstifadəçi tərəfindən dayandırıldı",
+    src_score: "Skor",
+    src_unknown: "Naməlum",
+    src_more_n: "{n} mənbə",
+    sources_kb: "KB",
+    no_sources_loaded: "Hələ heç bir mənbə əlavə edilməyib.",
+    type_label: "Növ",
+  },
+  en: {
+    app_name: "Assistant",
+    lang_label: "Language",
+    api_key_short: "API key",
+    api_key_ph: "Your X-API-KEY",
+
+    nav_chat: "💬 Chat",
+    nav_sources: "📁 Sources",
+    nav_settings: "⚙ Settings",
+
+    chat_title: "Chat",
+    session_label: "Session",
+    btn_abort: "⏹ Stop",
+    btn_clear_chat: "🗑 Clear chat",
+    btn_send: "➤ Send",
+    prompt_ph: "Type your question... (Enter to send, Shift+Enter for new line)",
+    footer_hint: "⚠ X-API-KEY required. [Source #N] tags in answers open the expandable sources panel.",
+    greeting: "Hi! I am <b>AI Assistant V3</b>. Add documents from the <b>“Sources”</b> page, then ask your questions — I will answer based on your knowledge base.",
+    pipeline_note: "Your queries are translated to English internally, retrieval and the LLM run in English, and the answer is translated back to your selected language.",
+
+    mode_indicator_offline: "🔒 Offline mode is active",
+    mode_indicator_online:  "🌐 Online mode is active",
+    mode_indicator_secret:  "🤫 Secret mode is active",
+
+    sources_page_title: "Knowledge Base — Sources",
+    sources_page_sub: "Add PDFs, URLs or raw text. All content is persisted to the local ChromaDB and reloaded on restart.",
+    sources_upload_title: "📄 Upload PDF or text file",
+    dropzone_main: "Drop the file here",
+    dropzone_sub: "or click to select",
+    dropzone_hint: "Supported formats: PDF, TXT, Markdown.",
+    sources_url_title: "🌐 Add from URL",
+    url_title_ph: "Title (optional)",
+    btn_add_url: "🌐 Add URL",
+    url_hint: "HTML pages are cleaned automatically; direct PDF links are accepted too.",
+    sources_text_title: "✍ Add raw text",
+    text_title_ph: "Title",
+    text_body_ph: "Text content...",
+    btn_add_text: "✍ Add text",
+    sources_list_title: "📚 Indexed sources",
+    sources_count_word: "sources",
+    chunks_word: "chunks",
+    sources_loading: "Loading...",
+    sources_empty: "No sources added yet.",
+    btn_refresh: "↻ Refresh",
+    btn_delete: "Delete",
+    confirm_delete: "Are you sure you want to delete this source?",
+
+    settings_page_title: "Settings",
+    settings_page_sub: "Manage operation mode, cloud provider and privacy options from here.",
+    mode_section_title: "Operation Mode",
+    mode_offline_title: "🔒 Offline Mode",
+    mode_offline_sub: "Local Ollama · qwen2.5:14b · No internet required",
+    mode_online_title: "🌐 Online Mode",
+    mode_online_sub: "Cloud LLM — Gemini 2.5 Flash or Grok-2",
+    mode_secret_title: "🤫 Secret Mode",
+    mode_secret_sub: "Local pseudonymisation + AES-256 encryption, then cloud",
+    provider_section: "Cloud Provider",
+    keywords_section: "Secret keywords (comma-separated)",
+    keywords_ph: "e.g. project-A, internal-code",
+    keywords_hint: "In Secret Mode these terms are masked locally before being sent to the cloud.",
+    session_block_title: "Session memory",
+    session_block_sub: "The last 5 conversation turns are kept in the LLM context.",
+    btn_reset_session: "🧹 Reset memory",
+    system_section: "Live Status",
+    st_db: "💾 ChromaDB",
+    st_ollama: "🦙 Ollama (local)",
+    st_gemini: "✨ Gemini API",
+    st_grok: "🤖 Grok API",
+    stats_loading: "Loading statistics...",
+    btn_refresh_health: "↻ Refresh status",
+
+    toast_missing_key: "API key is required.",
+    uploading: 'Uploading "{name}"...',
+    source_added: "Source added.",
+    upload_failed: "Upload failed",
+    url_added: "URL added.",
+    url_failed: "Could not add URL",
+    title_text_required: "Title and text are required.",
+    text_added: "Text added.",
+    add_failed: "Could not add",
+    deleted: "Deleted.",
+    delete_failed: "Delete failed",
+    memory_reset: "Memory reset.",
+    reset_failed: "Reset failed",
+    chat_cleared: "Chat cleared.",
+    save_default_title_prefix: "Chat answer",
+    btn_save_kb: "💾 Save to knowledge base",
+    saving_status: "Saving...",
+    saved_status: "✓ Saved",
+    save_failed: "Save failed",
+    saved_toast: "Saved to knowledge base.",
+    translating: "Translating to English...",
+    streaming: "Generating response...",
+    english_query: "English query",
+    live_english: "🌐 Live stream (English)",
+    error_label: "Error",
+    aborted_label: "⏹ Aborted by user",
+    src_score: "Score",
+    src_unknown: "Unknown",
+    src_more_n: "{n} sources",
+    sources_kb: "KB",
+    no_sources_loaded: "No sources added yet.",
+    type_label: "Type",
+  },
+  ru: {
+    app_name: "Ассистент",
+    lang_label: "Язык",
+    api_key_short: "API-ключ",
+    api_key_ph: "Ваш X-API-KEY",
+
+    nav_chat: "💬 Чат",
+    nav_sources: "📁 Источники",
+    nav_settings: "⚙ Настройки",
+
+    chat_title: "Чат",
+    session_label: "Сессия",
+    btn_abort: "⏹ Остановить",
+    btn_clear_chat: "🗑 Очистить чат",
+    btn_send: "➤ Отправить",
+    prompt_ph: "Введите вопрос... (Enter — отправить, Shift+Enter — новая строка)",
+    footer_hint: "⚠ Требуется X-API-KEY. Метки [Source #N] в ответах открывают раскрываемую панель источников.",
+    greeting: "Здравствуйте! Я <b>AI Ассистент V3</b>. Добавьте документы на странице <b>«Источники»</b> и задавайте вопросы — я отвечу на основе вашей базы знаний.",
+    pipeline_note: "Запросы переводятся на английский для внутренней обработки, поиск и LLM работают на английском, а ответ возвращается на выбранном вами языке.",
+
+    mode_indicator_offline: "🔒 Активен офлайн-режим",
+    mode_indicator_online:  "🌐 Активен онлайн-режим",
+    mode_indicator_secret:  "🤫 Активен секретный режим",
+
+    sources_page_title: "База знаний — Источники",
+    sources_page_sub: "Добавляйте PDF, URL или просто текст. Всё сохраняется в локальную ChromaDB и автоматически загружается при перезапуске.",
+    sources_upload_title: "📄 Загрузить PDF или текстовый файл",
+    dropzone_main: "Перетащите файл сюда",
+    dropzone_sub: "или нажмите, чтобы выбрать",
+    dropzone_hint: "Поддерживаемые форматы: PDF, TXT, Markdown.",
+    sources_url_title: "🌐 Добавить по URL",
+    url_title_ph: "Заголовок (необязательно)",
+    btn_add_url: "🌐 Добавить URL",
+    url_hint: "Меню и подвалы HTML-страниц автоматически очищаются; прямые ссылки на PDF тоже работают.",
+    sources_text_title: "✍ Добавить текст",
+    text_title_ph: "Заголовок",
+    text_body_ph: "Содержимое текста...",
+    btn_add_text: "✍ Добавить текст",
+    sources_list_title: "📚 Добавленные источники",
+    sources_count_word: "источников",
+    chunks_word: "фрагментов",
+    sources_loading: "Загрузка...",
+    sources_empty: "Источники ещё не добавлены.",
+    btn_refresh: "↻ Обновить",
+    btn_delete: "Удалить",
+    confirm_delete: "Вы уверены, что хотите удалить этот источник?",
+
+    settings_page_title: "Настройки",
+    settings_page_sub: "Управление режимом работы, облачным провайдером и параметрами приватности.",
+    mode_section_title: "Режим работы",
+    mode_offline_title: "🔒 Офлайн-режим",
+    mode_offline_sub: "Локальная Ollama · qwen2.5:14b · Без интернета",
+    mode_online_title: "🌐 Онлайн-режим",
+    mode_online_sub: "Облачный LLM — Gemini 2.5 Flash или Grok-2",
+    mode_secret_title: "🤫 Секретный режим",
+    mode_secret_sub: "Локальная псевдонимизация + AES-256, затем облако",
+    provider_section: "Облачный провайдер",
+    keywords_section: "Секретные ключевые слова (через запятую)",
+    keywords_ph: "напр.: проект-A, внутр-код",
+    keywords_hint: "В Секретном режиме эти слова маскируются локально перед отправкой в облако.",
+    session_block_title: "Память сессии",
+    session_block_sub: "В контексте LLM сохраняются последние 5 пар реплик.",
+    btn_reset_session: "🧹 Сбросить память",
+    system_section: "Текущее состояние",
+    st_db: "💾 ChromaDB",
+    st_ollama: "🦙 Ollama (локально)",
+    st_gemini: "✨ Gemini API",
+    st_grok: "🤖 Grok API",
+    stats_loading: "Загрузка статистики...",
+    btn_refresh_health: "↻ Обновить статус",
+
+    toast_missing_key: "Требуется API-ключ.",
+    uploading: "«{name}» загружается...",
+    source_added: "Источник добавлен.",
+    upload_failed: "Загрузка не удалась",
+    url_added: "URL добавлен.",
+    url_failed: "Не удалось добавить URL",
+    title_text_required: "Нужны заголовок и текст.",
+    text_added: "Текст добавлен.",
+    add_failed: "Не удалось добавить",
+    deleted: "Удалено.",
+    delete_failed: "Удаление не удалось",
+    memory_reset: "Память сброшена.",
+    reset_failed: "Сброс не удался",
+    chat_cleared: "Чат очищен.",
+    save_default_title_prefix: "Ответ из чата",
+    btn_save_kb: "💾 Сохранить в БЗ",
+    saving_status: "Сохранение...",
+    saved_status: "✓ Сохранено",
+    save_failed: "Сохранение не удалось",
+    saved_toast: "Сохранено в базу знаний.",
+    translating: "Перевод на английский...",
+    streaming: "Генерация ответа...",
+    english_query: "Запрос на английском",
+    live_english: "🌐 Прямой поток (англ.)",
+    error_label: "Ошибка",
+    aborted_label: "⏹ Прервано пользователем",
+    src_score: "Оценка",
+    src_unknown: "Неизвестно",
+    src_more_n: "{n} источников",
+    sources_kb: "КБ",
+    no_sources_loaded: "Источники ещё не добавлены.",
+    type_label: "Тип",
+  },
+};
+
+//============================================================================
+// State
+//============================================================================
+const state = {
+  apiKey: localStorage.getItem("ai-v3-key") || "",
+  mode: localStorage.getItem("ai-v3-mode") || "offline",
+  provider: localStorage.getItem("ai-v3-provider") || "gemini",
+  lang: localStorage.getItem("ai-v3-lang") || "az",
+  sessionId: localStorage.getItem("ai-v3-session") || ("s-" + Math.random().toString(36).slice(2, 10)),
+  currentAbort: null,
+  sources: [],
+  screen: "chat",
+};
+localStorage.setItem("ai-v3-session", state.sessionId);
+
+function t(key, vars) {
+  const dict = I18N[state.lang] || I18N.az;
+  let s = dict[key];
+  if (s == null) s = (I18N.en && I18N.en[key]) || key;
+  if (vars) {
+    for (const k in vars) s = s.replaceAll("{" + k + "}", vars[k]);
+  }
+  return s;
+}
+
+//============================================================================
+// i18n application
+//============================================================================
+function applyI18n() {
+  document.documentElement.lang = state.lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    el.innerHTML = t(el.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => {
+    el.setAttribute("placeholder", t(el.dataset.i18nPh));
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach(el => {
+    el.setAttribute("title", t(el.dataset.i18nTitle));
+  });
+  updateModeIndicator();
+  renderSourcesList(); // re-render to translate dynamic strings
+}
+
+//============================================================================
+// Toast
+//============================================================================
+function toast(msg, kind = "info") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+  el.style.borderColor = kind === "error" ? "var(--red)" : kind === "ok" ? "var(--green)" : "var(--border)";
+  setTimeout(() => el.classList.add("hidden"), 3000);
+}
+
+//============================================================================
+// Navigation
+//============================================================================
+function showScreen(name) {
+  state.screen = name;
+  document.querySelectorAll(".navtab").forEach(b => b.classList.toggle("active", b.dataset.screen === name));
+  document.querySelectorAll("[data-screen-panel]").forEach(s => s.classList.toggle("active", s.dataset.screenPanel === name));
+  if (name === "sources" && state.apiKey) loadSources();
+  if (name === "settings" && state.apiKey) refreshHealth();
+}
+document.querySelectorAll(".navtab").forEach(b => b.addEventListener("click", () => showScreen(b.dataset.screen)));
+
+//============================================================================
+// Lang switcher
+//============================================================================
+const langSelect = document.getElementById("langSelect");
+langSelect.value = state.lang;
+langSelect.addEventListener("change", () => {
+  state.lang = langSelect.value;
+  localStorage.setItem("ai-v3-lang", state.lang);
+  applyI18n();
+});
+
+//============================================================================
+// Mode + provider
+//============================================================================
+function updateModeIndicator() {
+  const key = { offline: "mode_indicator_offline", online: "mode_indicator_online", secret: "mode_indicator_secret" }[state.mode];
+  const el = document.getElementById("modeIndicator");
+  if (el) el.textContent = t(key);
+}
+function setMode(mode) {
+  state.mode = mode;
+  localStorage.setItem("ai-v3-mode", mode);
+  document.querySelectorAll(".mode-card").forEach(c => c.classList.toggle("active", c.dataset.mode === mode));
+  updateModeIndicator();
+}
+document.querySelectorAll(".mode-card").forEach(c => c.addEventListener("click", () => setMode(c.dataset.mode)));
+setMode(state.mode);
+
+document.querySelectorAll('input[name="provider"]').forEach(r => {
+  r.checked = r.value === state.provider;
+  r.addEventListener("change", () => {
+    state.provider = r.value;
+    localStorage.setItem("ai-v3-provider", r.value);
+  });
+});
+
+//============================================================================
+// API key
+//============================================================================
+const apiInput = document.getElementById("apiKey");
+apiInput.value = state.apiKey;
+apiInput.addEventListener("input", e => {
+  state.apiKey = e.target.value.trim();
+  localStorage.setItem("ai-v3-key", state.apiKey);
+});
+function authHeaders(extra = {}) {
+  if (!state.apiKey) {
+    toast(t("toast_missing_key"), "error");
+    throw new Error("missing key");
+  }
+  return { "X-API-KEY": state.apiKey, ...extra };
+}
+
+document.getElementById("sessionLabel").textContent = state.sessionId;
+document.getElementById("settingsSessionId").textContent = state.sessionId;
+
+//============================================================================
+// Markdown (minimal, safe)
+//============================================================================
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function renderMarkdown(text) {
+  if (!text) return "";
+  let html = escapeHtml(text);
+  html = html.replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code}</code></pre>`);
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<i>$1</i>");
+  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>")
+             .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+             .replace(/^# (.+)$/gm, "<h1>$1</h1>");
+  html = html.replace(/(^|\n)([-*] .+(?:\n[-*] .+)*)/g, (m, pre, lst) => {
+    const items = lst.split(/\n/).map(l => `<li>${l.replace(/^[-*]\s+/, "")}</li>`).join("");
+    return `${pre}<ul>${items}</ul>`;
+  });
+  html = html.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  html = html.split(/\n{2,}/).map(p => /<(h\d|ul|ol|pre)/.test(p) ? p : `<p>${p.replace(/\n/g, "<br/>")}</p>`).join("");
+  return html;
+}
+
+//============================================================================
+// Chat
+//============================================================================
+const chatEl = document.getElementById("chat");
+const promptEl = document.getElementById("prompt");
+const btnSend = document.getElementById("btnSend");
+const btnAbort = document.getElementById("btnAbort");
+
+function appendBubble(role, contentHtml = "") {
+  const wrap = document.createElement("div");
+  wrap.className = "bubble " + role + " markdown";
+  wrap.innerHTML = contentHtml;
+  chatEl.appendChild(wrap);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return wrap;
+}
+
+function renderSourcesPanel(items) {
+  if (!items || !items.length) return "";
+  const rows = items.map((s, i) => `
+    <div class="mt-2 p-2 rounded" style="background: #0d1117; border: 1px solid var(--border);">
+      <div class="flex items-center justify-between text-xs" style="color: var(--muted);">
+        <span><b style="color: var(--text);">#${i + 1}</b> · ${escapeHtml(s.source_title || t("src_unknown"))}</span>
+        <span>${t("src_score")}: <b style="color: var(--accent);">${(s.score * 100).toFixed(1)}%</b></span>
+      </div>
+      <div class="text-xs mt-1" style="color: var(--text);">${escapeHtml((s.text || "").slice(0, 360))}${(s.text || "").length > 360 ? "..." : ""}</div>
+    </div>
+  `).join("");
+  return `<details class="mt-3"><summary><span class="arrow">▶</span> ${t("src_more_n", { n: items.length })}</summary>${rows}</details>`;
+}
+
+function makeSaveButton(text) {
+  const btn = document.createElement("button");
+  btn.className = "btn text-xs mt-3";
+  btn.textContent = t("btn_save_kb");
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = t("saving_status");
+    try {
+      const title = `${t("save_default_title_prefix")} · ${new Date().toLocaleString(state.lang)}`;
+      const res = await fetch("/api/sources/text", {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ title, text }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast(t("saved_toast"), "ok");
+      btn.textContent = t("saved_status");
+      loadSources();
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = t("btn_save_kb");
+      toast(t("save_failed") + ": " + e.message, "error");
+    }
+  });
+  return btn;
+}
+
+promptEl.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+btnSend.addEventListener("click", sendChat);
+btnAbort.addEventListener("click", () => state.currentAbort && state.currentAbort.abort());
+
+async function sendChat() {
+  const msg = promptEl.value.trim();
+  if (!msg) return;
+  if (!state.apiKey) { toast(t("toast_missing_key"), "error"); return; }
+
+  appendBubble("user", `<p>${escapeHtml(msg)}</p>`);
+  promptEl.value = "";
+
+  const bot = appendBubble("bot",
+    `<span style="color: var(--muted);">${t("translating")}</span> <span class="cursor">▋</span>`);
+  const ctl = new AbortController();
+  state.currentAbort = ctl;
+  btnAbort.classList.remove("hidden");
+  btnSend.disabled = true;
+
+  const keywords = document.getElementById("secretKeywords").value
+    .split(",").map(s => s.trim()).filter(Boolean);
+
+  let translation = "";
+  let snippets = [];
+  let englishAnswer = "";
+  let finalAnswer = "";
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      signal: ctl.signal,
+      body: JSON.stringify({
+        session_id: state.sessionId,
+        message: msg,
+        mode: state.mode,
+        provider: state.provider,
+        secret_keywords: keywords,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    function repaint() {
+      const header = translation
+        ? `<div class="text-[11px] mb-2" style="color: var(--muted);">🔁 ${t("english_query")}: <i>${escapeHtml(translation)}</i></div>`
+        : "";
+      const liveBody = englishAnswer
+        ? `<div class="text-[11px] mt-2" style="color: var(--muted);">${t("live_english")}:</div>
+           <div class="markdown">${renderMarkdown(englishAnswer)}<span class="cursor">▋</span></div>`
+        : `<span style="color: var(--muted);">${t("streaming")}</span> <span class="cursor">▋</span>`;
+      const finalBody = finalAnswer
+        ? `<div class="markdown">${renderMarkdown(finalAnswer)}</div>`
+        : liveBody;
+      bot.innerHTML = header + finalBody + renderSourcesPanel(snippets);
+      if (finalAnswer) bot.appendChild(makeSaveButton(finalAnswer));
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let evt;
+        try { evt = JSON.parse(line); } catch { continue; }
+        if (evt.type === "translation") translation = evt.text;
+        else if (evt.type === "sources") snippets = evt.items || [];
+        else if (evt.type === "token_en") englishAnswer += evt.text;
+        else if (evt.type === "answer_az") finalAnswer = evt.text;
+        else if (evt.type === "error") throw new Error(evt.message);
+        repaint();
+      }
+    }
+    repaint();
+  } catch (e) {
+    if (e.name === "AbortError") {
+      bot.innerHTML += `<div class="text-xs mt-2" style="color: var(--amber);">${t("aborted_label")}</div>`;
+    } else {
+      bot.innerHTML = `<span style="color: var(--red);">${t("error_label")}: ${escapeHtml(e.message)}</span>`;
+    }
+  } finally {
+    state.currentAbort = null;
+    btnAbort.classList.add("hidden");
+    btnSend.disabled = false;
+  }
+}
+
+//============================================================================
+// Sources screen
+//============================================================================
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+
+dropzone.addEventListener("click", () => fileInput.click());
+["dragenter", "dragover"].forEach(ev => dropzone.addEventListener(ev, e => {
+  e.preventDefault(); dropzone.classList.add("drag");
+}));
+["dragleave", "drop"].forEach(ev => dropzone.addEventListener(ev, e => {
+  e.preventDefault(); dropzone.classList.remove("drag");
+}));
+dropzone.addEventListener("drop", e => {
+  if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", e => {
+  if (e.target.files.length) uploadFile(e.target.files[0]);
+});
+
+async function uploadFile(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("title", file.name);
+  try {
+    toast(t("uploading", { name: file.name }));
+    const res = await fetch("/api/sources/upload", {
+      method: "POST",
+      headers: authHeaders(),
+      body: fd,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    toast(t("source_added"), "ok");
+    loadSources();
+  } catch (e) {
+    toast(t("upload_failed") + ": " + e.message, "error");
+  }
+}
+
+document.getElementById("btnAddUrl").addEventListener("click", async () => {
+  const url = document.getElementById("urlInput").value.trim();
+  const title = document.getElementById("urlTitle").value.trim() || null;
+  if (!url) return;
+  try {
+    const res = await fetch("/api/sources/url", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ url, title }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    document.getElementById("urlInput").value = "";
+    document.getElementById("urlTitle").value = "";
+    toast(t("url_added"), "ok");
+    loadSources();
+  } catch (e) {
+    toast(t("url_failed") + ": " + e.message, "error");
+  }
+});
+
+document.getElementById("btnAddText").addEventListener("click", async () => {
+  const title = document.getElementById("textTitle").value.trim();
+  const text = document.getElementById("textBody").value.trim();
+  if (!title || !text) { toast(t("title_text_required"), "error"); return; }
+  try {
+    const res = await fetch("/api/sources/text", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ title, text }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    document.getElementById("textTitle").value = "";
+    document.getElementById("textBody").value = "";
+    toast(t("text_added"), "ok");
+    loadSources();
+  } catch (e) {
+    toast(t("add_failed") + ": " + e.message, "error");
+  }
+});
+
+document.getElementById("btnRefreshSources").addEventListener("click", loadSources);
+
+async function loadSources() {
+  const box = document.getElementById("sourcesList");
+  box.innerHTML = `<div style="color: var(--muted);" class="text-xs">${t("sources_loading")}</div>`;
+  try {
+    const res = await fetch("/api/sources", { headers: authHeaders() });
+    if (!res.ok) throw new Error(await res.text());
+    state.sources = await res.json();
+    renderSourcesList();
+  } catch (e) {
+    box.innerHTML = `<div class="text-xs" style="color: var(--red);">${t("error_label")}: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderSourcesList() {
+  const box = document.getElementById("sourcesList");
+  if (!box) return;
+  const totalChunks = state.sources.reduce((sum, s) => sum + (s.chunk_count || 0), 0);
+  document.getElementById("srcStatCount").textContent = state.sources.length;
+  document.getElementById("srcStatChunks").textContent = totalChunks;
+
+  if (!state.sources.length) {
+    box.innerHTML = `<div style="color: var(--muted);" class="text-xs">${t("sources_empty")}</div>`;
+    return;
+  }
+  box.innerHTML = "";
+  for (const s of state.sources) {
+    const row = document.createElement("div");
+    row.className = "flex items-start justify-between gap-2 p-3 rounded";
+    row.style.background = "#0d1117";
+    row.style.border = "1px solid var(--border)";
+    row.innerHTML = `
+      <div class="min-w-0 flex-1">
+        <div class="truncate text-sm font-medium" title="${escapeHtml(s.title)}">${escapeHtml(s.title)}</div>
+        <div class="text-[11px] mt-1" style="color: var(--muted);">
+          ${t("type_label")}: <code>${escapeHtml(s.type)}</code> ·
+          ${s.chunk_count} ${t("chunks_word")} ·
+          ${(s.char_count / 1024).toFixed(1)} ${t("sources_kb")}
+        </div>
+      </div>
+      <button class="btn-danger text-xs" data-id="${s.id}">${t("btn_delete")}</button>`;
+    row.querySelector("button").addEventListener("click", () => deleteSource(s.id));
+    box.appendChild(row);
+  }
+}
+
+async function deleteSource(id) {
+  if (!confirm(t("confirm_delete"))) return;
+  try {
+    const res = await fetch("/api/sources/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    toast(t("deleted"), "ok");
+    loadSources();
+  } catch (e) {
+    toast(t("delete_failed") + ": " + e.message, "error");
+  }
+}
+
+//============================================================================
+// Health
+//============================================================================
+async function refreshHealth() {
+  const dots = {
+    ollama: document.getElementById("stOllama"),
+    gemini: document.getElementById("stGemini"),
+    grok:   document.getElementById("stGrok"),
+    db:     document.getElementById("stDb"),
+  };
+  for (const k in dots) dots[k].className = "dot amber";
+  try {
+    const res = await fetch("/api/health", { headers: authHeaders() });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    dots.ollama.className = "dot " + (data.services.ollama ? "green" : "red");
+    dots.gemini.className = "dot " + (data.services.gemini ? "green" : "red");
+    dots.grok.className   = "dot " + (data.services.grok   ? "green" : "red");
+    dots.db.className     = "dot green";
+    document.getElementById("statsBox").innerHTML = `
+      <div>📂 ${t("sources_count_word")}: <b style="color: var(--text);">${data.engine.sources}</b></div>
+      <div>🧩 ${t("chunks_word")}: <b style="color: var(--text);">${data.engine.chunks}</b></div>
+      <div>💽 Chroma: <code>${escapeHtml(data.engine.chroma_path)}</code></div>
+      <div>🗂 Workspace: <code>${escapeHtml(data.workspace)}</code></div>`;
+  } catch (e) {
+    document.getElementById("statsBox").innerHTML =
+      `<div style="color: var(--red);">${t("error_label")}: ${escapeHtml(e.message)}</div>`;
+  }
+}
+document.getElementById("btnRefreshHealth").addEventListener("click", refreshHealth);
+
+//============================================================================
+// Misc
+//============================================================================
+document.getElementById("btnClearChat").addEventListener("click", () => {
+  chatEl.innerHTML = "";
+  appendBubble("bot", `<p>${t("chat_cleared")}</p>`);
+});
+
+document.getElementById("btnResetSession").addEventListener("click", async () => {
+  try {
+    const res = await fetch(`/api/session/${encodeURIComponent(state.sessionId)}/reset`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    toast(t("memory_reset"), "ok");
+  } catch (e) {
+    toast(t("reset_failed") + ": " + e.message, "error");
+  }
+});
+
+//============================================================================
+// Boot
+//============================================================================
+applyI18n();
+showScreen("chat");
+if (state.apiKey) {
+  loadSources();
+  refreshHealth();
+}
+</script>
+</body>
+</html>
