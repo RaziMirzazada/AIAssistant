@@ -43,6 +43,7 @@ from services.llm import (
     translate_en_to_az,
 )
 from services.rag import HybridSearchEngine
+from services.reranker import get_reranker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -299,10 +300,29 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
             english_query = await translate_az_to_en(req.message)
             yield _ndjson({"type": "translation", "text": english_query})
 
-            # 2) Retrieve in English
-            results = await eng.search(english_query)
+            # 2) Retrieve in English (Stage 1 — hybrid retrieval, recall-oriented)
+            retrieve_k = (
+                settings.RERANKER_RETRIEVE_K
+                if settings.ENABLE_RERANKER
+                else settings.RAG_TOP_K
+            )
+            results = await eng.search(english_query, top_k=retrieve_k)
+
+            # 2b) Rerank (Stage 2 — cross-encoder, precision-oriented).
+            # Fail-safe: any error inside .rerank() returns the hybrid order.
+            reranked_flag = False
+            if settings.ENABLE_RERANKER and results:
+                results = await get_reranker().rerank(english_query, results)
+                # If at least one result actually got a rerank_score we mark
+                # this run as truly reranked. Otherwise the reranker fell back.
+                reranked_flag = any(r.rerank_score is not None for r in results)
+
             snippets = [r.to_dict() for r in results]
-            yield _ndjson({"type": "sources", "items": snippets})
+            yield _ndjson({
+                "type": "sources",
+                "items": snippets,
+                "reranked": reranked_flag,
+            })
 
             # 3) LLM stream (English) — emits a meta event then tokens
             stream_req = StreamRequest(

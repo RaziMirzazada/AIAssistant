@@ -804,15 +804,27 @@ function appendBubble(role, contentHtml = "") {
 
 function renderSourcesPanel(items) {
   if (!items || !items.length) return "";
-  const rows = items.map((s, i) => `
+  const rows = items.map((s, i) => {
+    const hybrid = (s.score * 100).toFixed(1);
+    let subScore = "";
+    if (s.rerank_score != null) {
+      // Sigmoid-normalised rerank score is the "score" field now;
+      // hybrid is reconstructed from vec/bm25 components for transparency.
+      const hybridApprox = (0.65 * (s.vector_score || 0) + 0.35 * (s.bm25_score || 0)) * 100;
+      subScore = `<span style="color: var(--muted);">
+        (hybrid ${hybridApprox.toFixed(1)}% ·
+         <span style="color: var(--accent);">✨ rerank ${(s.rerank_score * 100).toFixed(1)}%</span>)
+      </span>`;
+    }
+    return `
     <div class="mt-2 p-2 rounded" style="background: #0d1117; border: 1px solid var(--border);">
       <div class="flex items-center justify-between text-xs" style="color: var(--muted);">
         <span><b style="color: var(--text);">#${i + 1}</b> · ${escapeHtml(s.source_title || t("src_unknown"))}</span>
-        <span>${t("src_score")}: <b style="color: var(--accent);">${(s.score * 100).toFixed(1)}%</b></span>
+        <span>${t("src_score")}: <b style="color: var(--accent);">${hybrid}%</b> ${subScore}</span>
       </div>
       <div class="text-xs mt-1" style="color: var(--text);">${escapeHtml((s.text || "").slice(0, 360))}${(s.text || "").length > 360 ? "..." : ""}</div>
-    </div>
-  `).join("");
+    </div>`;
+  }).join("");
   return `<details class="mt-3"><summary><span class="arrow">▶</span> ${t("src_more_n", { n: items.length })}</summary>${rows}</details>`;
 }
 
@@ -896,6 +908,7 @@ async function sendChat() {
       if (!runMeta) return "";
       const modeIcon = { offline: "🔒", online: "🌐", secret: "🤫" }[runMeta.mode] || "•";
       const tp = runMeta.two_pass ? " · 🔬 2-pass" : "";
+      const rr = runMeta.reranked ? " · ✨ reranked" : "";
       const outline = (runMeta.outline && runMeta.outline.length)
         ? `<details class="mt-1"><summary style="color: var(--muted); font-size: 11px;">📋 ${runMeta.outline.length} bölmə</summary>
            <ol style="color: var(--muted); font-size: 11px; padding-left: 18px; margin-top: 4px;">
@@ -905,7 +918,7 @@ async function sendChat() {
       return `<div class="text-[11px] mb-2 px-2 py-1 rounded"
                    style="background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border);">
                 ${modeIcon} <b>${runMeta.mode}</b> · ${escapeHtml(runMeta.provider)} ·
-                <code>${escapeHtml(runMeta.model)}</code> · top-${runMeta.top_k}${tp}
+                <code>${escapeHtml(runMeta.model)}</code> · top-${runMeta.top_k}${tp}${rr}
                 ${outline}
               </div>`;
     }

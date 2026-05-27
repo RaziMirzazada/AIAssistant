@@ -612,6 +612,10 @@ async def stream_response(req: StreamRequest) -> AsyncIterator[StreamEvent]:
             outline = []
 
     # ---- Emit meta so the UI can confirm WHICH mode/provider/depth ran -----
+    reranked = any(
+        isinstance(s, dict) and s.get("rerank_score") is not None
+        for s in req.snippets
+    )
     yield StreamEvent(
         kind="meta",
         meta={
@@ -631,6 +635,8 @@ async def stream_response(req: StreamRequest) -> AsyncIterator[StreamEvent]:
             "top_k": len(req.snippets),
             "outline": [t["title"] for t in outline],
             "max_output_tokens": settings.MAX_OUTPUT_TOKENS,
+            "reranked": reranked,
+            "reranker_model": settings.RERANKER_MODEL if reranked else None,
         },
     )
 
