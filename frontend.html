@@ -78,6 +78,13 @@
   /* Lang select */
   .lang-select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
   .lang-select:focus { outline: none; border-color: var(--accent); }
+
+  /* Depth pill bar */
+  .depth-pill { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+                border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer;
+                transition: all .15s; }
+  .depth-pill:hover { color: var(--text); border-color: var(--accent); }
+  .depth-pill.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 </style>
 </head>
 <body class="h-screen flex flex-col">
@@ -147,6 +154,14 @@
     </div>
 
     <div class="border-t p-4" style="border-color: var(--border); background: var(--panel);">
+      <!-- Depth pill bar -->
+      <div class="flex items-center justify-center gap-2 mb-3 max-w-[1100px] mx-auto">
+        <span class="text-[11px]" style="color: var(--muted);" data-i18n="depth_label">Cavab dərinliyi:</span>
+        <button class="depth-pill active" data-depth="auto"     data-i18n="depth_auto">🤖 Auto</button>
+        <button class="depth-pill"        data-depth="simple"   data-i18n="depth_simple">🪶 Qısa</button>
+        <button class="depth-pill"        data-depth="moderate" data-i18n="depth_moderate">📖 Orta</button>
+        <button class="depth-pill"        data-depth="deep"     data-i18n="depth_deep">🔬 Dərin</button>
+      </div>
       <div class="flex items-end gap-2 max-w-[1100px] mx-auto">
         <textarea id="prompt" class="input" rows="2"
                   data-i18n-ph="prompt_ph"
@@ -428,6 +443,18 @@ const I18N = {
     sources_kb: "KB",
     no_sources_loaded: "Hələ heç bir mənbə əlavə edilməyib.",
     type_label: "Növ",
+
+    // V4 adaptive depth
+    depth_label: "Cavab dərinliyi:",
+    depth_auto: "🤖 Auto",
+    depth_simple: "🪶 Qısa",
+    depth_moderate: "📖 Orta",
+    depth_deep: "🔬 Dərin",
+    depth_badge_auto: "🤖 auto",
+    depth_badge_manual: "👤 əl ilə",
+    depth_label_simple: "qısa",
+    depth_label_moderate: "orta",
+    depth_label_deep: "dərin",
   },
   en: {
     app_name: "Assistant",
@@ -532,6 +559,18 @@ const I18N = {
     sources_kb: "KB",
     no_sources_loaded: "No sources added yet.",
     type_label: "Type",
+
+    // V4 adaptive depth
+    depth_label: "Answer depth:",
+    depth_auto: "🤖 Auto",
+    depth_simple: "🪶 Brief",
+    depth_moderate: "📖 Standard",
+    depth_deep: "🔬 Deep",
+    depth_badge_auto: "🤖 auto",
+    depth_badge_manual: "👤 manual",
+    depth_label_simple: "brief",
+    depth_label_moderate: "standard",
+    depth_label_deep: "deep",
   },
   ru: {
     app_name: "Ассистент",
@@ -636,6 +675,18 @@ const I18N = {
     sources_kb: "КБ",
     no_sources_loaded: "Источники ещё не добавлены.",
     type_label: "Тип",
+
+    // V4 adaptive depth
+    depth_label: "Глубина ответа:",
+    depth_auto: "🤖 Авто",
+    depth_simple: "🪶 Кратко",
+    depth_moderate: "📖 Стандарт",
+    depth_deep: "🔬 Глубоко",
+    depth_badge_auto: "🤖 авто",
+    depth_badge_manual: "👤 вручную",
+    depth_label_simple: "кратко",
+    depth_label_moderate: "стандарт",
+    depth_label_deep: "глубоко",
   },
 };
 
@@ -647,6 +698,7 @@ const state = {
   mode: localStorage.getItem("ai-v3-mode") || "offline",
   provider: localStorage.getItem("ai-v3-provider") || "gemini",
   lang: localStorage.getItem("ai-v3-lang") || "az",
+  depth: localStorage.getItem("ai-v3-depth") || "auto",   // auto | simple | moderate | deep
   sessionId: localStorage.getItem("ai-v3-session") || ("s-" + Math.random().toString(36).slice(2, 10)),
   currentAbort: null,
   sources: [],
@@ -740,6 +792,19 @@ document.querySelectorAll('input[name="provider"]').forEach(r => {
     localStorage.setItem("ai-v3-provider", r.value);
   });
 });
+
+//============================================================================
+// Depth pill bar
+//============================================================================
+function setDepth(depth) {
+  state.depth = depth;
+  localStorage.setItem("ai-v3-depth", depth);
+  document.querySelectorAll(".depth-pill").forEach(p =>
+    p.classList.toggle("active", p.dataset.depth === depth));
+}
+document.querySelectorAll(".depth-pill").forEach(p =>
+  p.addEventListener("click", () => setDepth(p.dataset.depth)));
+setDepth(state.depth);
 
 //============================================================================
 // API key
@@ -896,6 +961,7 @@ async function sendChat() {
         mode: state.mode,
         provider: state.provider,
         secret_keywords: keywords,
+        depth: state.depth === "auto" ? null : state.depth,
       }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
@@ -907,8 +973,14 @@ async function sendChat() {
     function metaBadge() {
       if (!runMeta) return "";
       const modeIcon = { offline: "🔒", online: "🌐", secret: "🤫" }[runMeta.mode] || "•";
+      const depthIcon = { simple: "🪶", moderate: "📖", deep: "🔬" }[runMeta.depth_chosen] || "•";
+      const depthLabel = t("depth_label_" + (runMeta.depth_chosen || "moderate"));
+      const depthSrc = runMeta.depth_source === "manual" ? t("depth_badge_manual") : t("depth_badge_auto");
       const tp = runMeta.two_pass ? " · 🔬 2-pass" : "";
       const rr = runMeta.reranked ? " · ✨ reranked" : "";
+      const qt = runMeta.question_type
+        ? ` · <span style="color: var(--muted);">${escapeHtml(runMeta.question_type)}</span>`
+        : "";
       const outline = (runMeta.outline && runMeta.outline.length)
         ? `<details class="mt-1"><summary style="color: var(--muted); font-size: 11px;">📋 ${runMeta.outline.length} bölmə</summary>
            <ol style="color: var(--muted); font-size: 11px; padding-left: 18px; margin-top: 4px;">
@@ -918,7 +990,8 @@ async function sendChat() {
       return `<div class="text-[11px] mb-2 px-2 py-1 rounded"
                    style="background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border);">
                 ${modeIcon} <b>${runMeta.mode}</b> · ${escapeHtml(runMeta.provider)} ·
-                <code>${escapeHtml(runMeta.model)}</code> · top-${runMeta.top_k}${tp}${rr}
+                <code>${escapeHtml(runMeta.model)}</code> · top-${runMeta.top_k}${tp}${rr} ·
+                ${depthSrc} → ${depthIcon} <b>${depthLabel}</b>${qt}
                 ${outline}
               </div>`;
     }
