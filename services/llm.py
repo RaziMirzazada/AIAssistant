@@ -105,29 +105,66 @@ memory_store = MemoryStore(max_turns=settings.MEMORY_TURNS)
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# V4 "Always Maximum" depth — system prompts
+# V4 Adaptive Depth — three system prompts, picked by question complexity
 # ---------------------------------------------------------------------------
+
+CONCISE_SYSTEM_PROMPT = (
+    "You are AI Assistant V4, a precise research assistant.\n"
+    "The question is SIMPLE (a definition, a factual lookup, a single-concept "
+    "query). Give a focused, direct answer — do NOT pad with unnecessary "
+    "structural sections.\n"
+    "\n"
+    "STRICT RULES:\n"
+    "1. Ground every claim in the supplied context. Cite [Source #N] inline.\n"
+    "2. If the context is insufficient, say so plainly in 1 sentence.\n"
+    "3. Aim for 150–400 words. Be precise, not exhaustive.\n"
+    "4. Use simple Markdown — short paragraphs, occasional bullet list, bold "
+    "for key terms. NO H2 headers like 'Executive Summary' or 'Knowledge Gaps' "
+    "— those are reserved for deep analysis. Just answer the question.\n"
+    "5. If you genuinely cannot answer from the context, say so in one line "
+    "and stop."
+)
+
+MODERATE_SYSTEM_PROMPT = (
+    "You are AI Assistant V4, a thorough research assistant.\n"
+    "The question needs a structured but focused answer. Provide substantive "
+    "depth without exhaustively covering every angle.\n"
+    "\n"
+    "STRICT RULES:\n"
+    "1. Ground every claim in the supplied context. Cite [Source #N] inline.\n"
+    "2. If the context is insufficient, say so explicitly.\n"
+    "3. Aim for 500–900 words. Substantive but not exhaustive.\n"
+    "4. Use this Markdown structure with exactly these H2 headers:\n"
+    "## Summary\n"
+    "A 3–5 sentence digest of the answer with citations.\n"
+    "## Key Findings\n"
+    "3–6 bulleted findings, each with citations.\n"
+    "## Analysis\n"
+    "2–3 substantive paragraphs (or a few H3 subsections) that explain the "
+    "'why' and connect the findings, with citations.\n"
+    "5. Add a '## Caveats' section ONLY if there are genuine caveats worth "
+    "raising. Otherwise omit it — do not pad."
+)
 
 DEEP_SYSTEM_PROMPT = (
     "You are AI Assistant V4, a senior research analyst.\n"
-    "Your job is to produce DEEP, COMPREHENSIVE, MULTI-ANGLE analyses — never "
-    "short or surface-level answers. Even simple questions deserve a thorough "
-    "treatment grounded in the provided sources.\n"
+    "The question requires DEEP, COMPREHENSIVE, MULTI-ANGLE analysis. The "
+    "question is complex (comparison, evaluation, multi-angle research) and "
+    "deserves exhaustive treatment.\n"
     "\n"
     "STRICT RULES:\n"
     "1. Ground every factual claim in the supplied context snippets and cite "
     "them inline as [Source #N] (1-based). Multiple citations per claim are "
     "encouraged: [Source #2, #7].\n"
     "2. If the context is insufficient for a part of the question, say so "
-    "explicitly in a section called 'Knowledge Gaps' — do not hallucinate.\n"
-    "3. Be exhaustive. Use the full available output budget. Aim for "
-    "1500–4000 words of substantive analysis. Quality > brevity.\n"
-    "4. Always use Markdown formatting: H2/H3 headers, bullet lists, "
-    "numbered lists, bold for key terms, tables for comparisons.\n"
+    "explicitly in the 'Knowledge Gaps' section — do not hallucinate.\n"
+    "3. Be exhaustive. Aim for 1500–4000 words of substantive analysis.\n"
+    "4. Always use Markdown: H2/H3 headers, bullet lists, numbered lists, "
+    "bold for key terms, tables for comparisons.\n"
     "5. Show the reasoning, not just the conclusion. Compare sources where "
     "they agree or disagree.\n"
     "\n"
-    "REQUIRED STRUCTURE for every answer (use these exact H2 headers):\n"
+    "REQUIRED STRUCTURE (use these exact H2 headers):\n"
     "## Executive Summary\n"
     "A 4–8 sentence digest of the answer with the most important citations.\n"
     "## Key Findings\n"
@@ -139,29 +176,40 @@ DEEP_SYSTEM_PROMPT = (
     "Where the sources disagree, where evidence is weak, where alternative "
     "interpretations are possible. Cite both sides.\n"
     "## Knowledge Gaps\n"
-    "What the supplied sources do NOT cover, and what would be needed to fully "
-    "answer the question.\n"
+    "What the supplied sources do NOT cover, and what would be needed to "
+    "fully answer the question.\n"
     "## Conclusion\n"
     "A definitive synthesis (3–6 sentences) tying everything together."
 )
 
 PLANNER_SYSTEM_PROMPT = (
-    "You are a research planner. Given a user question and a body of retrieved "
-    "context, design an outline of distinct analytical themes that, taken "
-    "together, would constitute a deep, exhaustive answer.\n"
+    "You are a research planner. Given a user question and retrieved context, "
+    "(a) classify the question's complexity, (b) classify its type, and "
+    "(c) design an outline of analytical themes for the deep-answer path.\n"
     "\n"
     "Return ONLY valid JSON in this exact shape (no markdown fences, no prose):\n"
     "{\n"
+    '  "question_type": "definition" | "factual" | "comparison" | "analysis" '
+    '| "research" | "how_to" | "opinion",\n'
+    '  "complexity":   "simple" | "moderate" | "deep",\n'
     '  "themes": [\n'
-    '    {"title": "<H3 subsection title>", "focus": "<1-sentence guidance on what to cover and which Source #N rows are most relevant>"},\n'
+    '    {"title": "<H3 subsection title>", "focus": "<1-sentence guidance on '
+    'what to cover and which Source #N rows are most relevant>"},\n'
     "    ...\n"
     "  ]\n"
     "}\n"
     "\n"
-    f"Produce between {settings.OUTLINE_MIN_SECTIONS} and {settings.OUTLINE_MAX_SECTIONS} themes. "
-    "Themes must be non-overlapping and collectively cover the question from "
-    "multiple angles (history, mechanism, evidence, competing views, "
-    "implications, etc. — adapt to the domain)."
+    "COMPLEXITY RULES (be honest — do not inflate):\n"
+    "* simple   — definitions, single-fact lookups, 'what is X', 'when did Y "
+    "happen'. Use 0 themes (themes array empty).\n"
+    "* moderate — explanations needing 2–4 angles, brief comparisons, focused "
+    "how-to. Use 3–4 themes.\n"
+    "* deep     — multi-dimensional comparison, evaluative research, complex "
+    "'why' / 'should we' / 'compare X across Y' questions, multi-source "
+    "synthesis. Use 5–7 themes.\n"
+    "\n"
+    "When uncertain, choose 'moderate'. Do NOT default to 'deep' just "
+    "because the corpus is large. Match depth to question, not to corpus size."
 )
 
 
@@ -195,10 +243,16 @@ def build_messages(
     user_prompt: str,
     context_block: str,
     outline: list[dict[str, str]] | None = None,
+    system_prompt: str = DEEP_SYSTEM_PROMPT,
 ) -> list[dict[str, str]]:
-    """Assemble the OpenAI-style chat message list for the expansion pass."""
+    """Assemble the OpenAI-style chat message list for the expansion pass.
+
+    ``system_prompt`` should be one of CONCISE/MODERATE/DEEP — picked by
+    :func:`_system_prompt_for_depth`. ``outline`` only meaningfully applies
+    to the DEEP prompt (the others ignore it and answer directly).
+    """
+    system_parts = [system_prompt]
     outline_block = _format_outline(outline or [])
-    system_parts = [DEEP_SYSTEM_PROMPT]
     if outline_block:
         system_parts.append(outline_block)
     system_parts.append(f"---\nRetrieved context (cite as [Source #N]):\n{context_block}\n---")
@@ -232,7 +286,10 @@ class _StreamError(RuntimeError):
     pass
 
 
-async def _stream_ollama(messages: list[dict[str, str]]) -> AsyncIterator[str]:
+async def _stream_ollama(
+    messages: list[dict[str, str]],
+    max_tokens: int | None = None,
+) -> AsyncIterator[str]:
     url = f"{settings.OLLAMA_HOST.rstrip('/')}/api/chat"
     payload = {
         "model": settings.OLLAMA_LLM_MODEL,
@@ -241,7 +298,7 @@ async def _stream_ollama(messages: list[dict[str, str]]) -> AsyncIterator[str]:
         "options": {
             "temperature": settings.TEMPERATURE,
             "num_ctx": settings.OLLAMA_NUM_CTX,
-            "num_predict": settings.MAX_OUTPUT_TOKENS,
+            "num_predict": max_tokens or settings.MAX_OUTPUT_TOKENS,
             "top_p": 0.9,
             "repeat_penalty": 1.05,
         },
@@ -266,7 +323,10 @@ async def _stream_ollama(messages: list[dict[str, str]]) -> AsyncIterator[str]:
             raise _StreamError(f"Ollama stream failed: {exc}") from exc
 
 
-async def _stream_gemini(messages: list[dict[str, str]]) -> AsyncIterator[str]:
+async def _stream_gemini(
+    messages: list[dict[str, str]],
+    max_tokens: int | None = None,
+) -> AsyncIterator[str]:
     system_text = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
     contents = []
     for m in messages:
@@ -284,15 +344,18 @@ async def _stream_gemini(messages: list[dict[str, str]]) -> AsyncIterator[str]:
         f"{settings.GEMINI_LLM_MODEL}:streamGenerateContent"
         f"?alt=sse&key={settings.GEMINI_API_KEY}"
     )
+    out_tokens = max_tokens or settings.MAX_OUTPUT_TOKENS
+    # Scale thinking budget to depth: small budget for simple, full for deep.
+    thinking = min(settings.GEMINI_THINKING_BUDGET, max(256, out_tokens // 4))
     payload: dict = {
         "contents": contents,
         "generationConfig": {
             "temperature": settings.TEMPERATURE,
-            "maxOutputTokens": settings.MAX_OUTPUT_TOKENS,
+            "maxOutputTokens": out_tokens,
             "topP": 0.95,
             # Gemini 2.5 extended reasoning. The thinking budget burns reasoning
             # tokens before the visible answer, producing markedly deeper output.
-            "thinkingConfig": {"thinkingBudget": settings.GEMINI_THINKING_BUDGET},
+            "thinkingConfig": {"thinkingBudget": thinking},
         },
     }
     if system_text:
@@ -321,7 +384,10 @@ async def _stream_gemini(messages: list[dict[str, str]]) -> AsyncIterator[str]:
             raise _StreamError(f"Gemini stream failed: {exc}") from exc
 
 
-async def _stream_grok(messages: list[dict[str, str]]) -> AsyncIterator[str]:
+async def _stream_grok(
+    messages: list[dict[str, str]],
+    max_tokens: int | None = None,
+) -> AsyncIterator[str]:
     url = f"{settings.GROK_BASE_URL.rstrip('/')}/chat/completions"
     headers = {
         "Authorization": f"Bearer {settings.GROK_API_KEY}",
@@ -332,7 +398,7 @@ async def _stream_grok(messages: list[dict[str, str]]) -> AsyncIterator[str]:
         "messages": messages,
         "stream": True,
         "temperature": settings.TEMPERATURE,
-        "max_tokens": settings.MAX_OUTPUT_TOKENS,
+        "max_tokens": max_tokens or settings.MAX_OUTPUT_TOKENS,
         "top_p": 0.95,
     }
     async with httpx.AsyncClient(timeout=None) as client:
@@ -489,41 +555,109 @@ async def _plan_complete(
     return await _gemini_complete_chat(messages)
 
 
-def _parse_outline(raw: str) -> list[dict[str, str]]:
-    """Extract a {themes:[{title,focus}]} list from the planner's response.
+_VALID_COMPLEXITIES: tuple[str, ...] = ("simple", "moderate", "deep")
+_VALID_QUESTION_TYPES: tuple[str, ...] = (
+    "definition", "factual", "comparison", "analysis",
+    "research", "how_to", "opinion",
+)
+
+
+@dataclass
+class Plan:
+    """Output of the planner pass.
+
+    ``complexity`` and ``question_type`` always have valid values (falling
+    back to ``settings.DEFAULT_DEPTH`` and ``"analysis"`` respectively on
+    parse failure). ``themes`` may be empty (legitimately, for simple
+    questions, or as a fallback if the JSON failed to parse).
+    """
+
+    complexity: str
+    question_type: str
+    themes: list[dict[str, str]]
+
+
+def _parse_plan(raw: str) -> Plan:
+    """Extract complexity + question_type + themes from the planner response.
 
     Defensive: planners sometimes wrap JSON in ```json fences or add prose.
     """
+    fallback = Plan(
+        complexity=settings.DEFAULT_DEPTH,
+        question_type="analysis",
+        themes=[],
+    )
     if not raw:
-        return []
-    # Strip code fences
+        return fallback
+
     cleaned = raw.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
         cleaned = re.sub(r"\s*```$", "", cleaned)
-    # Find the first {...} JSON object
     match = re.search(r"\{[\s\S]*\}", cleaned)
     if not match:
-        return []
+        return fallback
     try:
         data = json.loads(match.group(0))
     except json.JSONDecodeError:
-        return []
-    themes = data.get("themes") if isinstance(data, dict) else None
-    if not isinstance(themes, list):
-        return []
-    out: list[dict[str, str]] = []
-    for item in themes:
-        if not isinstance(item, dict):
-            continue
-        title = str(item.get("title", "")).strip()
-        focus = str(item.get("focus", "")).strip()
-        if title:
-            out.append({"title": title, "focus": focus})
-    # Cap to configured range
-    if len(out) > settings.OUTLINE_MAX_SECTIONS:
-        out = out[: settings.OUTLINE_MAX_SECTIONS]
-    return out
+        return fallback
+    if not isinstance(data, dict):
+        return fallback
+
+    complexity = str(data.get("complexity", "")).strip().lower()
+    if complexity not in _VALID_COMPLEXITIES:
+        complexity = settings.DEFAULT_DEPTH
+
+    qtype = str(data.get("question_type", "")).strip().lower()
+    if qtype not in _VALID_QUESTION_TYPES:
+        qtype = "analysis"
+
+    themes_raw = data.get("themes")
+    themes: list[dict[str, str]] = []
+    if isinstance(themes_raw, list):
+        for item in themes_raw:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title", "")).strip()
+            focus = str(item.get("focus", "")).strip()
+            if title:
+                themes.append({"title": title, "focus": focus})
+        if len(themes) > settings.OUTLINE_MAX_SECTIONS:
+            themes = themes[: settings.OUTLINE_MAX_SECTIONS]
+
+    return Plan(complexity=complexity, question_type=qtype, themes=themes)
+
+
+def _resolve_depth(plan: Plan, override: str | None) -> tuple[str, str]:
+    """Decide the final depth and where it came from.
+
+    Returns (depth, source) where source is one of "manual" or "auto".
+    """
+    if override and override in _VALID_COMPLEXITIES:
+        return override, "manual"
+    return plan.complexity, "auto"
+
+
+def _system_prompt_for_depth(depth: str) -> str:
+    return {
+        "simple":   CONCISE_SYSTEM_PROMPT,
+        "moderate": MODERATE_SYSTEM_PROMPT,
+        "deep":     DEEP_SYSTEM_PROMPT,
+    }[depth]
+
+
+def _budget_for_depth(depth: str) -> tuple[int, int]:
+    """Return (max_output_tokens, snippet_cap) for this depth.
+
+    snippet_cap re-tightens the LLM context: even though Stage-2 returns 15
+    chunks, simple questions only need a handful of them. Saves tokens and
+    keeps attention focused.
+    """
+    return {
+        "simple":   (settings.DEPTH_SIMPLE_MAX_TOKENS,   settings.DEPTH_SIMPLE_TOP_N),
+        "moderate": (settings.DEPTH_MODERATE_MAX_TOKENS, settings.DEPTH_MODERATE_TOP_N),
+        "deep":     (settings.DEPTH_DEEP_MAX_TOKENS,     settings.DEPTH_DEEP_TOP_N),
+    }[depth]
 
 
 # ---------------------------------------------------------------------------
@@ -538,6 +672,8 @@ class StreamRequest:
     user_prompt_english: str
     snippets: list[dict]
     secret_keywords: list[str] = field(default_factory=list)
+    # V4 adaptive depth — None means "let the planner decide".
+    depth_override: str | None = None
 
 
 @dataclass
@@ -558,32 +694,33 @@ class StreamEvent:
 async def stream_response(req: StreamRequest) -> AsyncIterator[StreamEvent]:
     """Yield events for the given request.
 
-    The pipeline is **always maximum depth** (V4):
+    V4 adaptive-depth pipeline:
 
-        1. PLAN  — non-streamed call producing a JSON outline of 5–7 themes.
-        2. EXPAND — streamed call that writes the full structured deep
-           analysis following that outline.
+        1. PLAN    — non-streamed call that classifies complexity + question
+                     type and (for deep questions) emits a 5–7 theme outline.
+        2. RESOLVE — combine planner output with optional user override to
+                     pick a final depth (simple | moderate | deep).
+        3. EXPAND  — streamed call using the depth-appropriate system prompt,
+                     top-N snippet cap, and max_tokens budget.
 
-    The translation back to Azerbaijani is the caller's responsibility — this
+    Translation back to Azerbaijani is the caller's responsibility — this
     function deliberately operates on canonical English so retrieval, memory
     and the LLM all run in their highest-quality language.
     """
     memory = memory_store.get(req.session_id)
-    context_block = build_context_block(req.snippets)
 
     # ---- Secret mode setup --------------------------------------------------
+    full_context_block = build_context_block(req.snippets)
     if req.mode is LLMMode.SECRET:
         masked_prompt, prompt_map = crypto.pseudonymize(
             req.user_prompt_english, extra_keywords=req.secret_keywords
         )
         masked_context, ctx_map = crypto.pseudonymize(
-            context_block, extra_keywords=req.secret_keywords
+            full_context_block, extra_keywords=req.secret_keywords
         )
         combined_reverse = {**prompt_map.reverse, **ctx_map.reverse}
         prompt_for_llm = masked_prompt
         context_for_llm = masked_context
-        # Fernet round-trip integrity check — proves the in-memory key works
-        # end-to-end before we ship anything out.
         try:
             token = crypto.encrypt_payload(masked_prompt + masked_context)
             _ = crypto.decrypt_payload(token)
@@ -593,25 +730,50 @@ async def stream_response(req: StreamRequest) -> AsyncIterator[StreamEvent]:
     else:
         combined_reverse = {}
         prompt_for_llm = req.user_prompt_english
-        context_for_llm = context_block
+        context_for_llm = full_context_block
 
     # ---- Pass 1: PLAN -------------------------------------------------------
-    outline: list[dict[str, str]] = []
+    plan = Plan(
+        complexity=settings.DEFAULT_DEPTH,
+        question_type="analysis",
+        themes=[],
+    )
     if settings.ENABLE_TWO_PASS:
         plan_msgs = build_planner_messages(prompt_for_llm, context_for_llm)
         try:
-            raw_outline = await _plan_complete(req.mode, req.provider, plan_msgs)
-            outline = _parse_outline(raw_outline)
+            raw_plan = await _plan_complete(req.mode, req.provider, plan_msgs)
+            plan = _parse_plan(raw_plan)
             logger.info(
-                "Plan pass produced %d themes (mode=%s provider=%s).",
-                len(outline), req.mode.value, req.provider.value,
+                "Plan: complexity=%s qtype=%s themes=%d (mode=%s provider=%s).",
+                plan.complexity, plan.question_type, len(plan.themes),
+                req.mode.value, req.provider.value,
             )
         except _StreamError as exc:
-            # Planning is best-effort — fall back to single-pass on failure.
-            logger.warning("Plan pass failed, falling back to single-pass: %s", exc)
-            outline = []
+            logger.warning("Plan pass failed, using defaults: %s", exc)
 
-    # ---- Emit meta so the UI can confirm WHICH mode/provider/depth ran -----
+    # ---- Resolve final depth (planner vs user override) ---------------------
+    final_depth, depth_source = _resolve_depth(plan, req.depth_override)
+    max_tokens, snippet_cap = _budget_for_depth(final_depth)
+
+    # For simple/moderate depths we tighten the snippet pile — fewer chunks
+    # in the LLM context means crisper, less padded answers.
+    snippets_for_prompt = req.snippets[:snippet_cap]
+    capped_context = build_context_block(snippets_for_prompt)
+    if req.mode is LLMMode.SECRET and snippet_cap < len(req.snippets):
+        # Re-mask only what we'll actually ship.
+        capped_context, ctx_map2 = crypto.pseudonymize(
+            capped_context, extra_keywords=req.secret_keywords
+        )
+        combined_reverse = {**combined_reverse, **ctx_map2.reverse}
+        context_for_llm = capped_context
+    else:
+        context_for_llm = capped_context if req.mode is not LLMMode.SECRET else context_for_llm
+
+    # Outline only matters for deep — concise/moderate ignore it.
+    outline_for_prompt = plan.themes if final_depth == "deep" else []
+    system_prompt = _system_prompt_for_depth(final_depth)
+
+    # ---- Emit meta so the UI can show what actually ran --------------------
     reranked = any(
         isinstance(s, dict) and s.get("rerank_score") is not None
         for s in req.snippets
@@ -630,23 +792,33 @@ async def stream_response(req: StreamRequest) -> AsyncIterator[StreamEvent]:
                     else settings.GEMINI_LLM_MODEL
                 )
             ),
-            "depth": "maximum",
-            "two_pass": settings.ENABLE_TWO_PASS and bool(outline),
-            "top_k": len(req.snippets),
-            "outline": [t["title"] for t in outline],
-            "max_output_tokens": settings.MAX_OUTPUT_TOKENS,
+            "depth_chosen": final_depth,
+            "depth_source": depth_source,            # "auto" | "manual"
+            "question_type": plan.question_type,
+            "two_pass": settings.ENABLE_TWO_PASS and bool(outline_for_prompt),
+            "top_k": len(snippets_for_prompt),
+            "outline": [t["title"] for t in outline_for_prompt],
+            "max_output_tokens": max_tokens,
             "reranked": reranked,
             "reranker_model": settings.RERANKER_MODEL if reranked else None,
         },
     )
 
     # ---- Pass 2: EXPAND (streamed) -----------------------------------------
-    messages = build_messages(memory, prompt_for_llm, context_for_llm, outline=outline)
+    messages = build_messages(
+        memory,
+        prompt_for_llm,
+        context_for_llm,
+        outline=outline_for_prompt,
+        system_prompt=system_prompt,
+    )
 
     if req.mode is LLMMode.OFFLINE:
-        provider_stream = _stream_ollama(messages)
+        provider_stream = _stream_ollama(messages, max_tokens=max_tokens)
     else:
-        provider_stream = _provider_stream(req.provider, messages)
+        provider_stream = _provider_stream(
+            req.provider, messages, max_tokens=max_tokens
+        )
 
     accumulated = ""
     async for chunk in provider_stream:
@@ -660,12 +832,14 @@ async def stream_response(req: StreamRequest) -> AsyncIterator[StreamEvent]:
 
 
 def _provider_stream(
-    provider: CloudProvider, messages: list[dict[str, str]]
+    provider: CloudProvider,
+    messages: list[dict[str, str]],
+    max_tokens: int | None = None,
 ) -> AsyncIterator[str]:
     if provider is CloudProvider.GEMINI:
-        return _stream_gemini(messages)
+        return _stream_gemini(messages, max_tokens=max_tokens)
     if provider is CloudProvider.GROK:
-        return _stream_grok(messages)
+        return _stream_grok(messages, max_tokens=max_tokens)
     raise ValueError(f"Unknown cloud provider: {provider}")
 
 
