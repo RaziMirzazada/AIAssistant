@@ -136,6 +136,9 @@ class ChatRequest(BaseModel):
     mode: LLMMode = LLMMode.OFFLINE
     provider: CloudProvider = CloudProvider.GEMINI
     secret_keywords: list[str] = Field(default_factory=list)
+    # V4 adaptive depth — null/"auto" lets the planner decide; otherwise
+    # forces the depth. Accepted: "simple" | "moderate" | "deep".
+    depth: str | None = Field(default=None, max_length=16)
 
 
 class UrlIngestRequest(BaseModel):
@@ -308,8 +311,9 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
     eng = get_engine()
 
     logger.info(
-        "chat() session=%s mode=%s provider=%s msg_chars=%d",
-        req.session_id, req.mode.value, req.provider.value, len(req.message),
+        "chat() session=%s mode=%s provider=%s depth_override=%s msg_chars=%d",
+        req.session_id, req.mode.value, req.provider.value,
+        req.depth or "auto", len(req.message),
     )
 
     async def _producer():
@@ -343,6 +347,11 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
             })
 
             # 3) LLM stream (English) — emits a meta event then tokens
+            # Normalise depth: anything outside {simple, moderate, deep} becomes
+            # None ("auto"), so the planner decides.
+            depth_override = req.depth
+            if depth_override not in ("simple", "moderate", "deep"):
+                depth_override = None
             stream_req = StreamRequest(
                 session_id=req.session_id,
                 mode=req.mode,
@@ -350,6 +359,7 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
                 user_prompt_english=english_query,
                 snippets=snippets,
                 secret_keywords=req.secret_keywords,
+                depth_override=depth_override,
             )
             english_answer = ""
             async for event in stream_response(stream_req):

@@ -65,14 +65,29 @@ class Settings(BaseSettings):
     RAG_CANDIDATES_PER_INDEX: int = 80        # V4: was 30
     CHROMA_COLLECTION: str = "ai_assistant_v3_chunks"
 
-    # -- Depth & generation tuning (V4 "always maximum") -------------------------
-    MAX_OUTPUT_TOKENS: int = 16384            # long, structured answers
+    # -- Depth & generation tuning (V4 adaptive depth) ---------------------------
+    # MAX_OUTPUT_TOKENS is the ceiling; per-depth budgets below override it.
+    MAX_OUTPUT_TOKENS: int = 16384
     TEMPERATURE: float = 0.6                  # a touch of warmth for analysis
-    GEMINI_THINKING_BUDGET: int = 4096        # extended reasoning on Gemini 2.5
+    GEMINI_THINKING_BUDGET: int = 4096        # ceiling for Gemini 2.5 thinking
     ENABLE_TWO_PASS: bool = True              # plan -> expand pipeline
     OUTLINE_MIN_SECTIONS: int = 5
     OUTLINE_MAX_SECTIONS: int = 7
     OLLAMA_NUM_CTX: int = 16384               # large context window for local LLM
+
+    # Adaptive depth — planner classifies question; user can override.
+    # DEFAULT_DEPTH applies when the planner is uncertain / fails / disabled.
+    DEFAULT_DEPTH: str = "moderate"           # simple | moderate | deep
+
+    # Per-depth output budgets and snippet caps. The reranker still returns
+    # RERANKER_TOP_N chunks; the cap below trims that pile further before
+    # the LLM sees it, so simple answers don't get padded with weak context.
+    DEPTH_SIMPLE_MAX_TOKENS: int = 1024       # ~400 words
+    DEPTH_SIMPLE_TOP_N: int = 5
+    DEPTH_MODERATE_MAX_TOKENS: int = 3072     # ~900 words
+    DEPTH_MODERATE_TOP_N: int = 10
+    DEPTH_DEEP_MAX_TOKENS: int = 16384        # ~4000+ words (current default)
+    DEPTH_DEEP_TOP_N: int = 15
 
     # -- Reranker (V4 Stage 2 — cross-encoder, ACTIVE) ---------------------------
     # Set ENABLE_RERANKER=false in .env to revert to pure hybrid behaviour.
