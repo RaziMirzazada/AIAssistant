@@ -84,12 +84,24 @@ class Reranker:
             logger.info("Reranker '%s' ready on %s.", self._model_name, device)
             return self._model
 
-    def warmup(self) -> None:
-        """Public wrapper to trigger model load eagerly (e.g. on app startup)."""
+    def warmup(self) -> bool:
+        """Public wrapper to trigger model load eagerly (e.g. on app startup).
+
+        Returns True on success, False on failure. The reranker remains usable
+        either way — a False result just means the next chat call will retry
+        the load lazily and pay the load cost on the request hot path.
+        """
         try:
             self._ensure_loaded()
         except Exception:  # noqa: BLE001
-            logger.exception("Reranker warmup failed — will fall back at query time.")
+            logger.exception("Reranker warmup failed — will retry at query time.")
+            return False
+        return True
+
+    @property
+    def is_loaded(self) -> bool:
+        """True iff the underlying model is in memory and ready to serve."""
+        return self._model is not None
 
     # ----------------------------------------------------------------- scoring
     @staticmethod

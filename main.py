@@ -102,11 +102,19 @@ async def _startup() -> None:
     # ~600 MB download on first boot, then cached at ~/.cache/huggingface.
     if settings.ENABLE_RERANKER and settings.RERANKER_WARMUP_ON_STARTUP:
         logger.info("Warming up reranker '%s' …", settings.RERANKER_MODEL)
+        ok = False
         try:
-            await asyncio.to_thread(get_reranker().warmup)
-            logger.info("Reranker warmup complete.")
+            ok = await asyncio.to_thread(get_reranker().warmup)
         except Exception:  # noqa: BLE001 — warmup failure is non-fatal
-            logger.exception("Reranker warmup failed (will retry on first query).")
+            logger.exception("Reranker warmup raised unexpectedly.")
+        if ok:
+            logger.info("Reranker warmup complete — Stage 2 will run on every query.")
+        else:
+            logger.warning(
+                "Reranker warmup did NOT succeed — chat will fall back to "
+                "pure hybrid ordering until you install missing deps "
+                "(pip install -r requirements.txt) and restart."
+            )
 
 
 def get_engine() -> HybridSearchEngine:
