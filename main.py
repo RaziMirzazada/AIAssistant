@@ -278,12 +278,20 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
     Event shapes:
         {"type": "translation",  "text": "<english query>"}
         {"type": "sources",      "items": [...]}
+        {"type": "run_meta",     "mode": "...", "provider": "...", "model": "...",
+                                 "depth": "maximum", "two_pass": true, "top_k": N,
+                                 "outline": ["...", ...], "max_output_tokens": N}
         {"type": "token_en",     "text": "..."}      # streamed English tokens
         {"type": "answer_az",    "text": "..."}      # final Azerbaijani answer
         {"type": "error",        "message": "..."}
         {"type": "done"}
     """
     eng = get_engine()
+
+    logger.info(
+        "chat() session=%s mode=%s provider=%s msg_chars=%d",
+        req.session_id, req.mode.value, req.provider.value, len(req.message),
+    )
 
     async def _producer():
         try:
@@ -296,7 +304,7 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
             snippets = [r.to_dict() for r in results]
             yield _ndjson({"type": "sources", "items": snippets})
 
-            # 3) LLM stream (English)
+            # 3) LLM stream (English) — emits a meta event then tokens
             stream_req = StreamRequest(
                 session_id=req.session_id,
                 mode=req.mode,
@@ -306,9 +314,18 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
                 secret_keywords=req.secret_keywords,
             )
             english_answer = ""
-            async for token in stream_response(stream_req):
-                english_answer += token
-                yield _ndjson({"type": "token_en", "text": token})
+            async for event in stream_response(stream_req):
+                if event.kind == "meta":
+                    payload = {"type": "run_meta"}
+                    payload.update(event.meta or {})
+                    logger.info(
+                        "run_meta: %s",
+                        {k: v for k, v in (event.meta or {}).items() if k != "outline"},
+                    )
+                    yield _ndjson(payload)
+                elif event.kind == "token":
+                    english_answer += event.text
+                    yield _ndjson({"type": "token_en", "text": event.text})
 
             # 4) EN -> AZ (full final answer)
             az_answer = await translate_en_to_az(english_answer)

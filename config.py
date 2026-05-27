@@ -61,12 +61,21 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 80
     HYBRID_VECTOR_WEIGHT: float = 0.65
     HYBRID_BM25_WEIGHT: float = 0.35
-    RAG_TOP_K: int = 10
-    RAG_CANDIDATES_PER_INDEX: int = 30
+    RAG_TOP_K: int = 40                       # V4: deep retrieval, was 10
+    RAG_CANDIDATES_PER_INDEX: int = 80        # V4: was 30
     CHROMA_COLLECTION: str = "ai_assistant_v3_chunks"
 
+    # -- Depth & generation tuning (V4 "always maximum") -------------------------
+    MAX_OUTPUT_TOKENS: int = 16384            # long, structured answers
+    TEMPERATURE: float = 0.6                  # a touch of warmth for analysis
+    GEMINI_THINKING_BUDGET: int = 4096        # extended reasoning on Gemini 2.5
+    ENABLE_TWO_PASS: bool = True              # plan -> expand pipeline
+    OUTLINE_MIN_SECTIONS: int = 5
+    OUTLINE_MAX_SECTIONS: int = 7
+    OLLAMA_NUM_CTX: int = 16384               # large context window for local LLM
+
     # -- Conversation memory -----------------------------------------------------
-    MEMORY_TURNS: int = 5
+    MEMORY_TURNS: int = 10                    # V4: was 5
 
     # -- Networking --------------------------------------------------------------
     HOST: str = "0.0.0.0"

@@ -871,6 +871,7 @@ async function sendChat() {
   let snippets = [];
   let englishAnswer = "";
   let finalAnswer = "";
+  let runMeta = null;
 
   try {
     const res = await fetch("/api/chat", {
@@ -891,7 +892,26 @@ async function sendChat() {
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
 
+    function metaBadge() {
+      if (!runMeta) return "";
+      const modeIcon = { offline: "🔒", online: "🌐", secret: "🤫" }[runMeta.mode] || "•";
+      const tp = runMeta.two_pass ? " · 🔬 2-pass" : "";
+      const outline = (runMeta.outline && runMeta.outline.length)
+        ? `<details class="mt-1"><summary style="color: var(--muted); font-size: 11px;">📋 ${runMeta.outline.length} bölmə</summary>
+           <ol style="color: var(--muted); font-size: 11px; padding-left: 18px; margin-top: 4px;">
+             ${runMeta.outline.map(s => `<li>${escapeHtml(s)}</li>`).join("")}
+           </ol></details>`
+        : "";
+      return `<div class="text-[11px] mb-2 px-2 py-1 rounded"
+                   style="background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border);">
+                ${modeIcon} <b>${runMeta.mode}</b> · ${escapeHtml(runMeta.provider)} ·
+                <code>${escapeHtml(runMeta.model)}</code> · top-${runMeta.top_k}${tp}
+                ${outline}
+              </div>`;
+    }
+
     function repaint() {
+      const meta = metaBadge();
       const header = translation
         ? `<div class="text-[11px] mb-2" style="color: var(--muted);">🔁 ${t("english_query")}: <i>${escapeHtml(translation)}</i></div>`
         : "";
@@ -902,7 +922,7 @@ async function sendChat() {
       const finalBody = finalAnswer
         ? `<div class="markdown">${renderMarkdown(finalAnswer)}</div>`
         : liveBody;
-      bot.innerHTML = header + finalBody + renderSourcesPanel(snippets);
+      bot.innerHTML = meta + header + finalBody + renderSourcesPanel(snippets);
       if (finalAnswer) bot.appendChild(makeSaveButton(finalAnswer));
       chatEl.scrollTop = chatEl.scrollHeight;
     }
@@ -919,6 +939,7 @@ async function sendChat() {
         try { evt = JSON.parse(line); } catch { continue; }
         if (evt.type === "translation") translation = evt.text;
         else if (evt.type === "sources") snippets = evt.items || [];
+        else if (evt.type === "run_meta") runMeta = evt;
         else if (evt.type === "token_en") englishAnswer += evt.text;
         else if (evt.type === "answer_az") finalAnswer = evt.text;
         else if (evt.type === "error") throw new Error(evt.message);
