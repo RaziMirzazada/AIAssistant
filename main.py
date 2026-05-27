@@ -98,6 +98,16 @@ async def _startup() -> None:
     engine = await asyncio.to_thread(HybridSearchEngine)
     logger.info("Engine ready: %s", engine.stats())
 
+    # Preload the cross-encoder reranker so the first chat call is fast.
+    # ~600 MB download on first boot, then cached at ~/.cache/huggingface.
+    if settings.ENABLE_RERANKER and settings.RERANKER_WARMUP_ON_STARTUP:
+        logger.info("Warming up reranker '%s' …", settings.RERANKER_MODEL)
+        try:
+            await asyncio.to_thread(get_reranker().warmup)
+            logger.info("Reranker warmup complete.")
+        except Exception:  # noqa: BLE001 — warmup failure is non-fatal
+            logger.exception("Reranker warmup failed (will retry on first query).")
+
 
 def get_engine() -> HybridSearchEngine:
     if engine is None:
