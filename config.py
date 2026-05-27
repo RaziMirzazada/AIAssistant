@@ -95,6 +95,13 @@ class Settings(BaseSettings):
     VERIFIER_MIN_CONFIDENCE: float = 0.6      # below this → mark ⚠
     VERIFIER_CHUNK_PREVIEW_CHARS: int = 800   # how much of each chunk the judge sees
 
+    # -- Web Research mode (cloud provider's native grounding) -------------------
+    # Routes the chat call to Gemini's googleSearch tool or Grok's live
+    # search_parameters. Local RAG context is still included so the model
+    # can compare/contrast local vs. web evidence.
+    ENABLE_WEB_MODE: bool = True
+    WEB_MAX_RESULTS: int = 10                 # Grok cap; Gemini ignores
+
     # Per-depth output budgets and snippet caps. The reranker still returns
     # RERANKER_TOP_N chunks; the cap below trims that pile further before
     # the LLM sees it, so simple answers don't get padded with weak context.

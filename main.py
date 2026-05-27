@@ -403,6 +403,14 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
                 elif event.kind == "token":
                     english_answer += event.text
                     yield _ndjson({"type": "token_en", "text": event.text})
+                elif event.kind == "web":
+                    payload = {"type": "web_sources"}
+                    payload.update(event.meta or {})
+                    logger.info(
+                        "web_sources: %d urls",
+                        len((event.meta or {}).get("sources") or []),
+                    )
+                    yield _ndjson(payload)
 
             # 4) EN -> AZ (full final answer)
             az_answer = await translate_en_to_az(english_answer)

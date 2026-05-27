@@ -41,6 +41,7 @@ class LLMMode(str, Enum):
     OFFLINE = "offline"
     ONLINE = "online"
     SECRET = "secret"
+    WEB = "web"      # cloud provider + native web grounding (Gemini googleSearch / Grok live search)
 
 
 class CloudProvider(str, Enum):
@@ -326,7 +327,17 @@ async def _stream_ollama(
 async def _stream_gemini(
     messages: list[dict[str, str]],
     max_tokens: int | None = None,
+    web_search: bool = False,
+    web_collector: dict | None = None,
 ) -> AsyncIterator[str]:
+    """Stream Gemini.
+
+    When ``web_search=True`` the request includes Gemini 2.5's googleSearch
+    tool so the model can ground itself on live web results. Any
+    groundingMetadata that arrives in the response is appended into
+    ``web_collector["chunks"]`` (list) so the caller can render web citations
+    once streaming finishes. The collector is opt-in — pass ``None`` to skip.
+    """
     system_text = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
     contents = []
     for m in messages:
@@ -360,6 +371,10 @@ async def _stream_gemini(
     }
     if system_text:
         payload["systemInstruction"] = {"parts": [{"text": system_text}]}
+    if web_search:
+        # Gemini 2.5 native Google Search grounding. Returns groundingMetadata
+        # on candidates with web URIs + supports (offsets in the answer).
+        payload["tools"] = [{"googleSearch": {}}]
 
     async with httpx.AsyncClient(timeout=None) as client:
         try:
@@ -380,6 +395,10 @@ async def _stream_gemini(
                             text = part.get("text")
                             if text:
                                 yield text
+                        if web_collector is not None:
+                            gm = cand.get("groundingMetadata")
+                            if isinstance(gm, dict):
+                                web_collector.setdefault("grounding", []).append(gm)
         except httpx.HTTPError as exc:
             raise _StreamError(f"Gemini stream failed: {exc}") from exc
 
@@ -387,13 +406,22 @@ async def _stream_gemini(
 async def _stream_grok(
     messages: list[dict[str, str]],
     max_tokens: int | None = None,
+    web_search: bool = False,
+    web_collector: dict | None = None,
 ) -> AsyncIterator[str]:
+    """Stream Grok.
+
+    When ``web_search=True`` the request includes Grok's live ``search_parameters``
+    so the model can ground itself on live web + X results. Any citations
+    array that arrives in the response is appended to
+    ``web_collector["citations"]`` for the caller to render.
+    """
     url = f"{settings.GROK_BASE_URL.rstrip('/')}/chat/completions"
     headers = {
         "Authorization": f"Bearer {settings.GROK_API_KEY}",
         "Content-Type": "application/json",
     }
-    payload = {
+    payload: dict = {
         "model": settings.GROK_LLM_MODEL,
         "messages": messages,
         "stream": True,
@@ -401,6 +429,13 @@ async def _stream_grok(
         "max_tokens": max_tokens or settings.MAX_OUTPUT_TOKENS,
         "top_p": 0.95,
     }
+    if web_search:
+        payload["search_parameters"] = {
+            "mode": "on",
+            "max_search_results": settings.WEB_MAX_RESULTS,
+            "return_citations": True,
+            "sources": [{"type": "web"}, {"type": "news"}, {"type": "x"}],
+        }
     async with httpx.AsyncClient(timeout=None) as client:
         try:
             async with client.stream("POST", url, headers=headers, json=payload) as resp:
@@ -420,6 +455,13 @@ async def _stream_grok(
                         chunk = delta.get("content")
                         if chunk:
                             yield chunk
+                    # Grok emits citations[] on the final stream chunk.
+                    if web_collector is not None:
+                        cits = event.get("citations")
+                        if isinstance(cits, list) and cits:
+                            web_collector.setdefault("citations", []).extend(
+                                [str(c) for c in cits if c]
+                            )
         except httpx.HTTPError as exc:
             raise _StreamError(f"Grok stream failed: {exc}") from exc
 
@@ -755,11 +797,18 @@ async def stream_response(req: StreamRequest) -> AsyncIterator[StreamEvent]:
         3. EXPAND  — streamed call using the depth-appropriate system prompt,
                      top-N snippet cap, and max_tokens budget.
 
+    For WEB mode, the cloud provider is invoked with its native web grounding
+    tool (Gemini googleSearch / Grok live search). Local RAG snippets are
+    still included in the prompt so the model can compare local vs. web
+    evidence. Any web citations returned by the provider are collected and
+    surfaced via a final ``StreamEvent(kind="web")`` event.
+
     Translation back to Azerbaijani is the caller's responsibility — this
     function deliberately operates on canonical English so retrieval, memory
     and the LLM all run in their highest-quality language.
     """
     memory = memory_store.get(req.session_id)
+    web_mode = req.mode is LLMMode.WEB
 
     # ---- Secret mode setup --------------------------------------------------
     full_context_block = build_context_block(req.snippets)
@@ -853,6 +902,7 @@ async def stream_response(req: StreamRequest) -> AsyncIterator[StreamEvent]:
             "max_output_tokens": max_tokens,
             "reranked": reranked,
             "reranker_model": settings.RERANKER_MODEL if reranked else None,
+            "web_grounded": web_mode,
         },
     )
 
@@ -865,11 +915,16 @@ async def stream_response(req: StreamRequest) -> AsyncIterator[StreamEvent]:
         system_prompt=system_prompt,
     )
 
+    web_collector: dict | None = {} if web_mode else None
+
     if req.mode is LLMMode.OFFLINE:
         provider_stream = _stream_ollama(messages, max_tokens=max_tokens)
     else:
         provider_stream = _provider_stream(
-            req.provider, messages, max_tokens=max_tokens
+            req.provider, messages,
+            max_tokens=max_tokens,
+            web_search=web_mode,
+            web_collector=web_collector,
         )
 
     accumulated = ""
@@ -879,6 +934,12 @@ async def stream_response(req: StreamRequest) -> AsyncIterator[StreamEvent]:
         accumulated += chunk
         yield StreamEvent(kind="token", text=chunk)
 
+    # After streaming: surface collected web citations (if any).
+    if web_mode and web_collector:
+        web_sources = extract_web_sources(web_collector)
+        if web_sources:
+            yield StreamEvent(kind="web", meta={"sources": web_sources})
+
     memory.append("user", req.user_prompt_english)
     memory.append("assistant", accumulated)
 
@@ -887,12 +948,56 @@ def _provider_stream(
     provider: CloudProvider,
     messages: list[dict[str, str]],
     max_tokens: int | None = None,
+    web_search: bool = False,
+    web_collector: dict | None = None,
 ) -> AsyncIterator[str]:
     if provider is CloudProvider.GEMINI:
-        return _stream_gemini(messages, max_tokens=max_tokens)
+        return _stream_gemini(
+            messages, max_tokens=max_tokens,
+            web_search=web_search, web_collector=web_collector,
+        )
     if provider is CloudProvider.GROK:
-        return _stream_grok(messages, max_tokens=max_tokens)
+        return _stream_grok(
+            messages, max_tokens=max_tokens,
+            web_search=web_search, web_collector=web_collector,
+        )
     raise ValueError(f"Unknown cloud provider: {provider}")
+
+
+# ---------------------------------------------------------------------------
+# Web grounding helpers (Gemini groundingMetadata + Grok citations normaliser)
+# ---------------------------------------------------------------------------
+
+def extract_web_sources(collector: dict | None) -> list[dict[str, str]]:
+    """Normalise both providers' citation shapes into a single list of
+    ``{"url": ..., "title": ...}`` rows ready for the UI.
+
+    Gemini returns ``groundingMetadata.groundingChunks = [{"web": {"uri", "title"}}]``.
+    Grok returns ``citations = ["https://...", ...]`` (URLs only).
+    Duplicates are removed while preserving order of first appearance.
+    """
+    if not collector:
+        return []
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    # Gemini path
+    for gm in collector.get("grounding", []) or []:
+        for chunk in (gm or {}).get("groundingChunks", []) or []:
+            web = (chunk or {}).get("web") or {}
+            uri = web.get("uri") or web.get("url") or ""
+            title = web.get("title") or uri
+            if uri and uri not in seen:
+                seen.add(uri)
+                out.append({"url": uri, "title": title})
+
+    # Grok path
+    for url in collector.get("citations", []) or []:
+        if url and url not in seen:
+            seen.add(url)
+            out.append({"url": url, "title": url})
+
+    return out
 
 
 def _rehydrate_chunk(chunk: str, reverse_map: dict[str, str]) -> str:

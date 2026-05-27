@@ -305,7 +305,7 @@
       <!-- Mode -->
       <div class="space-y-3">
         <div class="text-xs uppercase tracking-wide" style="color: var(--muted);" data-i18n="mode_section_title">İş Rejimi</div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div class="mode-card active" data-mode="offline">
             <div class="font-medium" data-i18n="mode_offline_title">🔒 Oflayn Rejim</div>
             <div class="text-xs mt-1" style="color: var(--muted);" data-i18n="mode_offline_sub">
@@ -322,6 +322,12 @@
             <div class="font-medium" data-i18n="mode_secret_title">🤫 Məxfi Rejim</div>
             <div class="text-xs mt-1" style="color: var(--muted);" data-i18n="mode_secret_sub">
               Yerli psevdonimləşdirmə + AES-256 şifrələmə, sonra bulud
+            </div>
+          </div>
+          <div class="mode-card" data-mode="web">
+            <div class="font-medium" data-i18n="mode_web_title">🔎 Web Araşdırması</div>
+            <div class="text-xs mt-1" style="color: var(--muted);" data-i18n="mode_web_sub">
+              Bulud LLM + canlı veb axtarışı (Gemini googleSearch / Grok Live Search)
             </div>
           </div>
         </div>
@@ -413,6 +419,7 @@ const I18N = {
     mode_indicator_offline: "🔒 Oflayn rejim aktivdir",
     mode_indicator_online:  "🌐 Onlayn rejim aktivdir",
     mode_indicator_secret:  "🤫 Məxfi rejim aktivdir",
+    mode_indicator_web:     "🔎 Web Araşdırması aktivdir",
 
     sources_page_title: "Bilik Bazası — Mənbələr",
     sources_page_sub: "PDF, URL və ya birbaşa mətn əlavə edin. Bütün məzmun yerli ChromaDB-yə yazılır və proqram yenidən başladıldıqda avtomatik yüklənir.",
@@ -446,6 +453,11 @@ const I18N = {
     mode_online_sub: "Bulud LLM — Gemini 2.5 Flash və ya Grok-2",
     mode_secret_title: "🤫 Məxfi Rejim",
     mode_secret_sub: "Yerli psevdonimləşdirmə + AES-256 şifrələmə, sonra bulud",
+    mode_web_title: "🔎 Web Araşdırması",
+    mode_web_sub: "Bulud LLM + canlı veb axtarışı (Gemini googleSearch / Grok Live Search)",
+    web_sources_title: "🌍 Veb mənbələr",
+    web_sources_count: "{n} veb mənbə",
+    web_sources_empty: "Veb mənbə tapılmadı.",
     provider_section: "Bulud Provayderi",
     keywords_section: "Məxfi açar sözlər (vergüllə ayırın)",
     keywords_ph: "məs.: layihə-A, daxili-kod",
@@ -530,6 +542,7 @@ const I18N = {
     mode_indicator_offline: "🔒 Offline mode is active",
     mode_indicator_online:  "🌐 Online mode is active",
     mode_indicator_secret:  "🤫 Secret mode is active",
+    mode_indicator_web:     "🔎 Web Research mode is active",
 
     sources_page_title: "Knowledge Base — Sources",
     sources_page_sub: "Add PDFs, URLs or raw text. All content is persisted to the local ChromaDB and reloaded on restart.",
@@ -563,6 +576,11 @@ const I18N = {
     mode_online_sub: "Cloud LLM — Gemini 2.5 Flash or Grok-2",
     mode_secret_title: "🤫 Secret Mode",
     mode_secret_sub: "Local pseudonymisation + AES-256 encryption, then cloud",
+    mode_web_title: "🔎 Web Research",
+    mode_web_sub: "Cloud LLM + live web search (Gemini googleSearch / Grok Live Search)",
+    web_sources_title: "🌍 Web sources",
+    web_sources_count: "{n} web sources",
+    web_sources_empty: "No web sources found.",
     provider_section: "Cloud Provider",
     keywords_section: "Secret keywords (comma-separated)",
     keywords_ph: "e.g. project-A, internal-code",
@@ -646,6 +664,7 @@ const I18N = {
     mode_indicator_offline: "🔒 Активен офлайн-режим",
     mode_indicator_online:  "🌐 Активен онлайн-режим",
     mode_indicator_secret:  "🤫 Активен секретный режим",
+    mode_indicator_web:     "🔎 Активен режим Веб-исследования",
 
     sources_page_title: "База знаний — Источники",
     sources_page_sub: "Добавляйте PDF, URL или просто текст. Всё сохраняется в локальную ChromaDB и автоматически загружается при перезапуске.",
@@ -679,6 +698,11 @@ const I18N = {
     mode_online_sub: "Облачный LLM — Gemini 2.5 Flash или Grok-2",
     mode_secret_title: "🤫 Секретный режим",
     mode_secret_sub: "Локальная псевдонимизация + AES-256, затем облако",
+    mode_web_title: "🔎 Веб-исследование",
+    mode_web_sub: "Облачный LLM + живой веб-поиск (Gemini googleSearch / Grok Live Search)",
+    web_sources_title: "🌍 Веб-источники",
+    web_sources_count: "{n} веб-источников",
+    web_sources_empty: "Веб-источники не найдены.",
     provider_section: "Облачный провайдер",
     keywords_section: "Секретные ключевые слова (через запятую)",
     keywords_ph: "напр.: проект-A, внутр-код",
@@ -823,7 +847,12 @@ langSelect.addEventListener("change", () => {
 // Mode + provider
 //============================================================================
 function updateModeIndicator() {
-  const key = { offline: "mode_indicator_offline", online: "mode_indicator_online", secret: "mode_indicator_secret" }[state.mode];
+  const key = {
+    offline: "mode_indicator_offline",
+    online:  "mode_indicator_online",
+    secret:  "mode_indicator_secret",
+    web:     "mode_indicator_web",
+  }[state.mode] || "mode_indicator_offline";
   const el = document.getElementById("modeIndicator");
   if (el) el.textContent = t(key);
 }
@@ -1015,6 +1044,37 @@ function appendBubble(role, contentHtml = "") {
   return wrap;
 }
 
+function renderWebSourcesPanel(items) {
+  if (!items || !items.length) return "";
+  const rows = items.map((s, i) => {
+    const host = (() => {
+      try { return new URL(s.url).host; } catch { return s.url; }
+    })();
+    return `
+    <div class="mt-2 p-2 rounded" style="background: #0d1117; border: 1px solid var(--border);">
+      <div class="text-xs" style="color: var(--muted);">
+        <b style="color: var(--accent);">${i + 1}.</b> ${escapeHtml(host)}
+      </div>
+      <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer"
+         class="text-sm" style="color: var(--text); word-break: break-word;">
+        ${escapeHtml(s.title || s.url)}
+      </a>
+      <div class="text-[11px] mt-1" style="color: var(--muted); word-break: break-all;">
+        ${escapeHtml(s.url)}
+      </div>
+    </div>`;
+  }).join("");
+  return `
+    <details class="mt-3" open>
+      <summary><span class="arrow">▶</span>
+        <span style="color: var(--accent);">
+          🌍 ${t("web_sources_count", { n: items.length })}
+        </span>
+      </summary>
+      ${rows}
+    </details>`;
+}
+
 function renderVerificationPanel(v) {
   if (!v || !v.total) return "";
   const ok = v.supported, partial = v.partial, bad = v.unsupported;
@@ -1141,6 +1201,7 @@ async function sendChat() {
   let runMeta = null;
   let hydeInfo = { used: false, preview: null };
   let verification = null;
+  let webSources = [];
 
   try {
     const res = await fetch("/api/chat", {
@@ -1164,13 +1225,14 @@ async function sendChat() {
 
     function metaBadge() {
       if (!runMeta) return "";
-      const modeIcon = { offline: "🔒", online: "🌐", secret: "🤫" }[runMeta.mode] || "•";
+      const modeIcon = { offline: "🔒", online: "🌐", secret: "🤫", web: "🔎" }[runMeta.mode] || "•";
       const depthIcon = { simple: "🪶", moderate: "📖", deep: "🔬" }[runMeta.depth_chosen] || "•";
       const depthLabel = t("depth_label_" + (runMeta.depth_chosen || "moderate"));
       const depthSrc = runMeta.depth_source === "manual" ? t("depth_badge_manual") : t("depth_badge_auto");
       const tp = runMeta.two_pass ? " · 🔬 2-pass" : "";
       const rr = runMeta.reranked ? " · ✨ reranked" : "";
       const hy = hydeInfo.used ? " · 💡 HyDE" : "";
+      const wb = runMeta.web_grounded ? " · 🌍 web" : "";
       const hydePanel = hydeInfo.used && hydeInfo.preview
         ? `<details class="mt-1"><summary style="color: var(--muted); font-size: 11px;">💡 HyDE seed</summary>
            <div style="color: var(--muted); font-size: 11px; padding: 6px 8px;
@@ -1191,7 +1253,7 @@ async function sendChat() {
       return `<div class="text-[11px] mb-2 px-2 py-1 rounded"
                    style="background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border);">
                 ${modeIcon} <b>${runMeta.mode}</b> · ${escapeHtml(runMeta.provider)} ·
-                <code>${escapeHtml(runMeta.model)}</code> · top-${runMeta.top_k}${tp}${rr}${hy} ·
+                <code>${escapeHtml(runMeta.model)}</code> · top-${runMeta.top_k}${tp}${rr}${hy}${wb} ·
                 ${depthSrc} → ${depthIcon} <b>${depthLabel}</b>${qt}
                 ${outline}
                 ${hydePanel}
@@ -1211,6 +1273,7 @@ async function sendChat() {
         ? `<div class="markdown">${linkifyCitations(renderMarkdown(finalAnswer), snippets)}</div>`
         : liveBody;
       bot.innerHTML = meta + header + finalBody
+                      + renderWebSourcesPanel(webSources)
                       + renderVerificationPanel(verification)
                       + renderSourcesPanel(snippets);
       if (finalAnswer) bot.appendChild(makeSaveButton(finalAnswer));
@@ -1238,6 +1301,7 @@ async function sendChat() {
         else if (evt.type === "token_en") englishAnswer += evt.text;
         else if (evt.type === "answer_az") finalAnswer = evt.text;
         else if (evt.type === "verification") verification = evt;
+        else if (evt.type === "web_sources") webSources = evt.sources || [];
         else if (evt.type === "error") throw new Error(evt.message);
         repaint();
       }
