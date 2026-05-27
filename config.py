@@ -79,6 +79,13 @@ class Settings(BaseSettings):
     # DEFAULT_DEPTH applies when the planner is uncertain / fails / disabled.
     DEFAULT_DEPTH: str = "moderate"           # simple | moderate | deep
 
+    # -- HyDE (Hypothetical Document Embeddings) ---------------------------------
+    # Short queries embed poorly; ask the LLM to write a plausible 100-200 word
+    # answer first and embed THAT for the vector search. BM25 still uses raw.
+    ENABLE_HYDE: bool = True
+    HYDE_MIN_QUERY_TOKENS: int = 30           # only run on short queries
+    HYDE_MAX_OUTPUT_TOKENS: int = 384         # ~ 200 words
+
     # Per-depth output budgets and snippet caps. The reranker still returns
     # RERANKER_TOP_N chunks; the cap below trims that pile further before
     # the LLM sees it, so simple answers don't get padded with weak context.

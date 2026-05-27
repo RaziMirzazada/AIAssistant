@@ -555,6 +555,58 @@ async def _plan_complete(
     return await _gemini_complete_chat(messages)
 
 
+# ---------------------------------------------------------------------------
+# HyDE — Hypothetical Document Embeddings
+# ---------------------------------------------------------------------------
+
+_HYDE_SYSTEM = (
+    "You write hypothetical answers used only for semantic search seeding. "
+    "Given a question, produce a confident, plausible 100-200 word answer "
+    "as if you were an expert in the relevant domain. Use realistic "
+    "terminology, named entities and structure you would expect to find "
+    "in authoritative source material on the topic.\n"
+    "\n"
+    "STRICT RULES:\n"
+    "- Do NOT add disclaimers like 'I cannot' or 'as an AI'.\n"
+    "- Do NOT cite anything.\n"
+    "- Accuracy DOES NOT matter — the goal is to match the vocabulary and "
+    "structure of relevant source documents so the embedding lands close "
+    "to them in vector space.\n"
+    "- Output the answer text only. No preamble, no JSON, no markdown headers."
+)
+
+
+async def generate_hyde(
+    query: str,
+    mode: "LLMMode",
+    provider: "CloudProvider",
+) -> str:
+    """Produce a hypothetical answer to seed the vector retrieval step.
+
+    Returns the original query unchanged if the LLM call fails — so the
+    retrieval pipeline always has something to embed.
+    """
+    if not query or not query.strip():
+        return query
+    messages = [
+        {"role": "system", "content": _HYDE_SYSTEM},
+        {"role": "user",   "content": query.strip()},
+    ]
+    try:
+        if mode is LLMMode.OFFLINE:
+            # _ollama_complete has fixed 2048 num_predict — fine for HyDE.
+            raw = await _ollama_complete(messages)
+        elif provider is CloudProvider.GROK:
+            raw = await _grok_complete(messages)
+        else:
+            raw = await _gemini_complete_chat(messages)
+        # Trim to a sensible cap so we don't bloat the embedding input.
+        return (raw or "").strip()[: settings.HYDE_MAX_OUTPUT_TOKENS * 6]  # ~chars per token
+    except _StreamError:
+        logger.exception("HyDE generation failed — falling back to raw query.")
+        return query
+
+
 _VALID_COMPLEXITIES: tuple[str, ...] = ("simple", "moderate", "deep")
 _VALID_QUESTION_TYPES: tuple[str, ...] = (
     "definition", "factual", "comparison", "analysis",

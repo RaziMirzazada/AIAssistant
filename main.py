@@ -36,6 +36,7 @@ from services.llm import (
     CloudProvider,
     LLMMode,
     StreamRequest,
+    generate_hyde,
     memory_store,
     probe_all,
     stream_response,
@@ -328,7 +329,31 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
                 if settings.ENABLE_RERANKER
                 else settings.RAG_TOP_K
             )
-            results = await eng.search(english_query, top_k=retrieve_k)
+
+            # 2a) HyDE — only when the query is short enough to benefit.
+            # We approximate token count via whitespace word count (cheap, ~1:1
+            # for English). Long queries already have enough semantic surface.
+            hyde_doc: str | None = None
+            token_estimate = len(english_query.split())
+            if (
+                settings.ENABLE_HYDE
+                and token_estimate < settings.HYDE_MIN_QUERY_TOKENS
+            ):
+                try:
+                    hyde_doc = await generate_hyde(
+                        english_query, req.mode, req.provider
+                    )
+                    if hyde_doc and hyde_doc.strip() == english_query.strip():
+                        hyde_doc = None  # planner echoed the query — useless
+                except Exception:  # noqa: BLE001 — HyDE is best-effort
+                    logger.exception("HyDE failed; falling back to raw query.")
+                    hyde_doc = None
+
+            results = await eng.search(
+                english_query,
+                top_k=retrieve_k,
+                vector_query=hyde_doc,
+            )
 
             # 2b) Rerank (Stage 2 — cross-encoder, precision-oriented).
             # Fail-safe: any error inside .rerank() returns the hybrid order.
@@ -344,6 +369,9 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
                 "type": "sources",
                 "items": snippets,
                 "reranked": reranked_flag,
+                "hyde_used": hyde_doc is not None,
+                "hyde_preview": (hyde_doc[:240] + "…") if hyde_doc and len(hyde_doc) > 240
+                                else (hyde_doc or None),
             })
 
             # 3) LLM stream (English) — emits a meta event then tokens

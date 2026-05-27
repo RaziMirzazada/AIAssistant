@@ -394,13 +394,26 @@ class HybridSearchEngine:
         return True
 
     # ----------------------------------------------------------------- search
-    async def search(self, query: str, top_k: int | None = None) -> list[SearchResult]:
+    async def search(
+        self,
+        query: str,
+        top_k: int | None = None,
+        vector_query: str | None = None,
+    ) -> list[SearchResult]:
+        """Hybrid search with optional HyDE.
+
+        ``query`` is always used for the BM25 path (exact lexical match
+        matters there). ``vector_query`` — if supplied — replaces the query
+        for the embedding-based path. Pass the hypothetical document
+        produced by :func:`services.llm.generate_hyde` here.
+        """
         if not query or not query.strip():
             return []
         k = top_k or settings.RAG_TOP_K
         candidates = max(k * 3, settings.RAG_CANDIDATES_PER_INDEX)
 
-        vector_task = asyncio.to_thread(self._vector_search, query, candidates)
+        vec_text = (vector_query or query).strip() or query
+        vector_task = asyncio.to_thread(self._vector_search, vec_text, candidates)
         bm25_task = asyncio.to_thread(self._bm25_search, query, candidates)
         vector_hits, bm25_hits = await asyncio.gather(vector_task, bm25_task)
 
