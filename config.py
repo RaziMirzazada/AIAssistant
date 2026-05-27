@@ -86,6 +86,15 @@ class Settings(BaseSettings):
     HYDE_MIN_QUERY_TOKENS: int = 30           # only run on short queries
     HYDE_MAX_OUTPUT_TOKENS: int = 384         # ~ 200 words
 
+    # -- Citation Verifier (faithfulness check) ---------------------------------
+    # After the answer streams, every cited claim is judged against the actual
+    # source text. Runs async so the user reads the answer immediately; the
+    # verification panel appears a few seconds later.
+    ENABLE_VERIFIER: bool = True
+    VERIFIER_MAX_CLAIMS: int = 20             # cap to bound cost per answer
+    VERIFIER_MIN_CONFIDENCE: float = 0.6      # below this → mark ⚠
+    VERIFIER_CHUNK_PREVIEW_CHARS: int = 800   # how much of each chunk the judge sees
+
     # Per-depth output budgets and snippet caps. The reranker still returns
     # RERANKER_TOP_N chunks; the cap below trims that pile further before
     # the LLM sees it, so simple answers don't get padded with weak context.

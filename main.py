@@ -45,6 +45,7 @@ from services.llm import (
 )
 from services.rag import HybridSearchEngine
 from services.reranker import get_reranker
+from services.verifier import summarise, verify_answer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -406,6 +407,28 @@ async def chat(req: ChatRequest, _: str = Depends(require_api_key)) -> Streaming
             # 4) EN -> AZ (full final answer)
             az_answer = await translate_en_to_az(english_answer)
             yield _ndjson({"type": "answer_az", "text": az_answer})
+
+            # 5) Citation verification — runs against the *English* answer
+            # (since citations and snippets are in English). Fire-and-await
+            # here so the event is emitted before "done"; from the user's
+            # perspective the answer is already on screen, this just appends
+            # a verification panel a few seconds later.
+            if settings.ENABLE_VERIFIER and english_answer.strip() and snippets:
+                try:
+                    results = await verify_answer(english_answer, snippets)
+                    if results:
+                        payload = {"type": "verification"}
+                        payload.update(summarise(results))
+                        logger.info(
+                            "verification: %d total · %d supported · "
+                            "%d partial · %d unsupported",
+                            payload["total"], payload["supported"],
+                            payload["partial"], payload["unsupported"],
+                        )
+                        yield _ndjson(payload)
+                except Exception:  # noqa: BLE001 — never break chat
+                    logger.exception("Citation verification failed.")
+
             yield _ndjson({"type": "done"})
         except asyncio.CancelledError:
             logger.info("Chat stream cancelled by client.")
