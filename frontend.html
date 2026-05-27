@@ -85,6 +85,57 @@
                 transition: all .15s; }
   .depth-pill:hover { color: var(--text); border-color: var(--accent); }
   .depth-pill.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+  /* Clickable inline citations */
+  .citation-link {
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 0 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.92em;
+    border-bottom: 1px dotted var(--accent);
+    text-decoration: none;
+    transition: all .12s;
+    white-space: nowrap;
+  }
+  .citation-link:hover {
+    background: var(--accent);
+    color: #0d1117;
+    border-bottom-color: transparent;
+  }
+  .citation-tooltip {
+    position: fixed;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 10px 12px;
+    max-width: 420px;
+    min-width: 260px;
+    font-size: 12px;
+    color: var(--text);
+    z-index: 9999;
+    box-shadow: 0 6px 24px rgba(0,0,0,.45);
+    pointer-events: none;
+  }
+  .citation-tooltip .tt-head {
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .citation-tooltip .tt-body { color: var(--muted); line-height: 1.45; }
+  .source-row.highlight {
+    animation: srcflash 2s ease-out;
+  }
+  @keyframes srcflash {
+    0%   { background: var(--accent); }
+    20%  { background: var(--accent); }
+    100% { background: #0d1117; }
+  }
 </style>
 </head>
 <body class="h-screen flex flex-col">
@@ -851,6 +902,103 @@ function renderMarkdown(text) {
 }
 
 //============================================================================
+// Clickable inline citations — post-processes rendered Markdown to turn
+// every "[Source #N]" (and variants like "[Sources #2, #7]") into an
+// anchor with a hover tooltip and a scroll-to-source click handler.
+//============================================================================
+function linkifyCitations(html, snippets) {
+  if (!snippets || !snippets.length) return html;
+  // Capture [Source #3], [Sources #2, #7], [Source #5, 11]; preserves trailing punctuation
+  const re = /\[Sources?\s*#?\d+(?:\s*[,&]?\s*#?\d+)*\]/g;
+  return html.replace(re, (match) => {
+    const nums = (match.match(/\d+/g) || [])
+      .map(n => parseInt(n, 10))
+      .filter(n => n >= 1 && n <= snippets.length);
+    if (!nums.length) return match;
+    const inner = nums.map(n => {
+      const s = snippets[n - 1];
+      const title = (s && s.source_title) || t("src_unknown");
+      const score = s ? (s.score * 100).toFixed(0) + "%" : "—";
+      const text = (s && s.text) ? s.text.slice(0, 320) : "";
+      const ttData = encodeURIComponent(JSON.stringify({ title, score, text }));
+      return `<a class="citation-link"
+                 data-source-n="${n}"
+                 data-tt="${ttData}">[#${n}]</a>`;
+    }).join("");
+    return inner;
+  });
+}
+
+// Single shared tooltip element (created lazily)
+let _ttEl = null;
+function _ttGet() {
+  if (!_ttEl) {
+    _ttEl = document.createElement("div");
+    _ttEl.className = "citation-tooltip hidden";
+    document.body.appendChild(_ttEl);
+  }
+  return _ttEl;
+}
+function _ttShow(el) {
+  const raw = el.dataset.tt;
+  if (!raw) return;
+  let data;
+  try { data = JSON.parse(decodeURIComponent(raw)); } catch { return; }
+  const tt = _ttGet();
+  tt.innerHTML = `
+    <div class="tt-head">
+      <span>📄 ${escapeHtml(data.title)}</span>
+      <span style="color: var(--text);">${escapeHtml(data.score)}</span>
+    </div>
+    <div class="tt-body">${escapeHtml(data.text)}${data.text.length >= 320 ? "..." : ""}</div>
+  `;
+  tt.classList.remove("hidden");
+  const r = el.getBoundingClientRect();
+  // Prefer below; flip above if not enough room
+  const tH = tt.offsetHeight, tW = tt.offsetWidth;
+  let top = r.bottom + 8;
+  if (top + tH > window.innerHeight - 12) top = r.top - tH - 8;
+  let left = r.left;
+  if (left + tW > window.innerWidth - 12) left = window.innerWidth - tW - 12;
+  tt.style.top = Math.max(8, top) + "px";
+  tt.style.left = Math.max(8, left) + "px";
+}
+function _ttHide() {
+  if (_ttEl) _ttEl.classList.add("hidden");
+}
+
+// Delegated handlers: one set covers every citation link, including ones
+// added later by re-renders.
+document.addEventListener("mouseover", e => {
+  const link = e.target.closest(".citation-link");
+  if (link) _ttShow(link);
+});
+document.addEventListener("mouseout", e => {
+  if (e.target.closest(".citation-link")) _ttHide();
+});
+document.addEventListener("click", e => {
+  const link = e.target.closest(".citation-link");
+  if (!link) return;
+  e.preventDefault();
+  const n = parseInt(link.dataset.sourceN, 10);
+  if (!Number.isInteger(n)) return;
+  // Scroll the matching source row into view + flash it.
+  // Each row lives inside the most-recent answer bubble — find the closest
+  // .bubble.bot ancestor, then locate its nested .source-row[data-n="N"].
+  const bubble = link.closest(".bubble.bot");
+  if (!bubble) return;
+  const detailsEl = bubble.querySelector("details");
+  if (detailsEl && !detailsEl.open) detailsEl.open = true;
+  const row = bubble.querySelector(`.source-row[data-n="${n}"]`);
+  if (row) {
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.remove("highlight");
+    void row.offsetWidth;   // force reflow so animation restarts
+    row.classList.add("highlight");
+  }
+});
+
+//============================================================================
 // Chat
 //============================================================================
 const chatEl = document.getElementById("chat");
@@ -870,11 +1018,10 @@ function appendBubble(role, contentHtml = "") {
 function renderSourcesPanel(items) {
   if (!items || !items.length) return "";
   const rows = items.map((s, i) => {
+    const n = i + 1;
     const hybrid = (s.score * 100).toFixed(1);
     let subScore = "";
     if (s.rerank_score != null) {
-      // Sigmoid-normalised rerank score is the "score" field now;
-      // hybrid is reconstructed from vec/bm25 components for transparency.
       const hybridApprox = (0.65 * (s.vector_score || 0) + 0.35 * (s.bm25_score || 0)) * 100;
       subScore = `<span style="color: var(--muted);">
         (hybrid ${hybridApprox.toFixed(1)}% ·
@@ -882,9 +1029,10 @@ function renderSourcesPanel(items) {
       </span>`;
     }
     return `
-    <div class="mt-2 p-2 rounded" style="background: #0d1117; border: 1px solid var(--border);">
+    <div class="source-row mt-2 p-2 rounded" data-n="${n}"
+         style="background: #0d1117; border: 1px solid var(--border);">
       <div class="flex items-center justify-between text-xs" style="color: var(--muted);">
-        <span><b style="color: var(--text);">#${i + 1}</b> · ${escapeHtml(s.source_title || t("src_unknown"))}</span>
+        <span><b style="color: var(--text);">#${n}</b> · ${escapeHtml(s.source_title || t("src_unknown"))}</span>
         <span>${t("src_score")}: <b style="color: var(--accent);">${hybrid}%</b> ${subScore}</span>
       </div>
       <div class="text-xs mt-1" style="color: var(--text);">${escapeHtml((s.text || "").slice(0, 360))}${(s.text || "").length > 360 ? "..." : ""}</div>
@@ -1003,10 +1151,10 @@ async function sendChat() {
         : "";
       const liveBody = englishAnswer
         ? `<div class="text-[11px] mt-2" style="color: var(--muted);">${t("live_english")}:</div>
-           <div class="markdown">${renderMarkdown(englishAnswer)}<span class="cursor">▋</span></div>`
+           <div class="markdown">${linkifyCitations(renderMarkdown(englishAnswer), snippets)}<span class="cursor">▋</span></div>`
         : `<span style="color: var(--muted);">${t("streaming")}</span> <span class="cursor">▋</span>`;
       const finalBody = finalAnswer
-        ? `<div class="markdown">${renderMarkdown(finalAnswer)}</div>`
+        ? `<div class="markdown">${linkifyCitations(renderMarkdown(finalAnswer), snippets)}</div>`
         : liveBody;
       bot.innerHTML = meta + header + finalBody + renderSourcesPanel(snippets);
       if (finalAnswer) bot.appendChild(makeSaveButton(finalAnswer));
