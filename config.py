@@ -74,6 +74,16 @@ class Settings(BaseSettings):
     OUTLINE_MAX_SECTIONS: int = 7
     OLLAMA_NUM_CTX: int = 16384               # large context window for local LLM
 
+    # -- Reranker (V4 Stage 2 — cross-encoder) -----------------------------------
+    ENABLE_RERANKER: bool = False             # commit 3 will flip this to True
+    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    RERANKER_DEVICE: str | None = None        # None = auto-detect (cuda > cpu)
+    RERANKER_RETRIEVE_K: int = 50             # candidates fed into the reranker
+    RERANKER_TOP_N: int = 15                  # results that survive to the LLM
+    RERANKER_BATCH_SIZE: int = 32
+    RERANKER_SCORE_MODE: str = "two_stage"    # two_stage | replace | blend
+    RERANKER_WARMUP_ON_STARTUP: bool = False  # commit 3 will flip this too
+
     # -- Conversation memory -----------------------------------------------------
     MEMORY_TURNS: int = 10                    # V4: was 5
 

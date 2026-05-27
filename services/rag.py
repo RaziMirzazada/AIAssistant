@@ -171,9 +171,10 @@ class SearchResult:
     score: float
     vector_score: float
     bm25_score: float
+    rerank_score: float | None = None  # V4 Stage 2 — set by services.reranker
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "chunk_id": self.chunk_id,
             "source_id": self.source_id,
             "source_title": self.source_title,
@@ -182,6 +183,9 @@ class SearchResult:
             "vector_score": round(self.vector_score, 4),
             "bm25_score": round(self.bm25_score, 4),
         }
+        if self.rerank_score is not None:
+            out["rerank_score"] = round(self.rerank_score, 4)
+        return out
 
 
 # ---------------------------------------------------------------------------
