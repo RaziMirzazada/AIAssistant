@@ -21,6 +21,92 @@ import logging
 import re
 import threading
 from collections import deque
+
+# ---------------------------------------------------------------------------
+# Gemini auth header — never put the key in the URL query string. URLs end
+# up in exceptions, traces, logs, and screenshots. Header values do not.
+# ---------------------------------------------------------------------------
+def _gemini_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+    h = {"x-goog-api-key": settings.GEMINI_API_KEY, "Content-Type": "application/json"}
+    if extra:
+        h.update(extra)
+    return h
+
+
+# ---------------------------------------------------------------------------
+# Sanitised HTTP error → no secrets ever leak into logs.
+# ---------------------------------------------------------------------------
+def _sanitise_url(url: str) -> str:
+    """Strip query strings entirely from a URL — they may carry secrets."""
+    return url.split("?", 1)[0]
+
+
+def _safe_http_msg(exc: Exception) -> str:
+    """Build an error message that NEVER contains query-string secrets."""
+    import httpx
+    if isinstance(exc, httpx.HTTPStatusError):
+        url = _sanitise_url(str(exc.request.url))
+        return f"HTTP {exc.response.status_code} from {url}"
+    if isinstance(exc, httpx.RequestError):
+        url = _sanitise_url(str(exc.request.url)) if exc.request else "<unknown>"
+        return f"{type(exc).__name__} on {url}: {exc}"
+    return str(exc)
+
+
+# ---------------------------------------------------------------------------
+# Retry-with-backoff for transient 5xx / 429 / network errors.
+# ---------------------------------------------------------------------------
+async def _retrying_post(
+    client,            # httpx.AsyncClient
+    url: str,
+    *,
+    json: dict | None = None,
+    headers: dict | None = None,
+    max_attempts: int = 3,
+    base_delay: float = 0.8,
+):
+    """POST with exponential backoff on 429 / 5xx / network errors."""
+    import httpx
+    last_exc: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = await client.post(url, json=json, headers=headers)
+            if resp.status_code in (429, 500, 502, 503, 504) and attempt < max_attempts:
+                wait = base_delay * (2 ** (attempt - 1))
+                logger.warning(
+                    "Transient %d from %s (attempt %d/%d) — retrying in %.1fs",
+                    resp.status_code, _sanitise_url(url), attempt, max_attempts, wait,
+                )
+                await asyncio.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp
+        except httpx.HTTPStatusError as exc:
+            last_exc = exc
+            if exc.response.status_code in (429, 500, 502, 503, 504) and attempt < max_attempts:
+                wait = base_delay * (2 ** (attempt - 1))
+                logger.warning(
+                    "Transient %d (attempt %d/%d) — retrying in %.1fs",
+                    exc.response.status_code, attempt, max_attempts, wait,
+                )
+                await asyncio.sleep(wait)
+                continue
+            raise
+        except (httpx.ConnectError, httpx.ReadTimeout, httpx.ReadError) as exc:
+            last_exc = exc
+            if attempt < max_attempts:
+                wait = base_delay * (2 ** (attempt - 1))
+                logger.warning(
+                    "Network error (attempt %d/%d) — retrying in %.1fs: %s",
+                    attempt, max_attempts, wait, type(exc).__name__,
+                )
+                await asyncio.sleep(wait)
+                continue
+            raise
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("retry loop exhausted with no exception captured")
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import AsyncIterator
@@ -352,8 +438,7 @@ async def _stream_gemini(
 
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{settings.GEMINI_LLM_MODEL}:streamGenerateContent"
-        f"?alt=sse&key={settings.GEMINI_API_KEY}"
+        f"{settings.GEMINI_LLM_MODEL}:streamGenerateContent?alt=sse"
     )
     out_tokens = max_tokens or settings.MAX_OUTPUT_TOKENS
     # Scale thinking budget to depth: small budget for simple, full for deep.
@@ -378,7 +463,9 @@ async def _stream_gemini(
 
     async with httpx.AsyncClient(timeout=None) as client:
         try:
-            async with client.stream("POST", url, json=payload) as resp:
+            async with client.stream(
+                "POST", url, json=payload, headers=_gemini_headers()
+            ) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     if not line or not line.startswith("data:"):
@@ -400,7 +487,7 @@ async def _stream_gemini(
                             if isinstance(gm, dict):
                                 web_collector.setdefault("grounding", []).append(gm)
         except httpx.HTTPError as exc:
-            raise _StreamError(f"Gemini stream failed: {exc}") from exc
+            raise _StreamError(f"Gemini stream failed: {_safe_http_msg(exc)}") from None
 
 
 async def _stream_grok(
@@ -463,7 +550,7 @@ async def _stream_grok(
                                 [str(c) for c in cits if c]
                             )
         except httpx.HTTPError as exc:
-            raise _StreamError(f"Grok stream failed: {exc}") from exc
+            raise _StreamError(f"Grok stream failed: {_safe_http_msg(exc)}") from None
 
 
 # ---------------------------------------------------------------------------
@@ -471,11 +558,15 @@ async def _stream_grok(
 # ---------------------------------------------------------------------------
 
 async def gemini_complete(prompt: str, *, temperature: float = 0.0) -> str:
-    """One-shot Gemini call. Returns the full response text."""
+    """One-shot Gemini call. Returns the full response text.
+
+    Retries up to 3× on 429/5xx (Gemini regional overload is common) with
+    exponential backoff. Key travels in the x-goog-api-key header so it
+    never appears in URLs / exceptions / logs.
+    """
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
         f"{settings.GEMINI_TRANSLATE_MODEL}:generateContent"
-        f"?key={settings.GEMINI_API_KEY}"
     )
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -483,10 +574,11 @@ async def gemini_complete(prompt: str, *, temperature: float = 0.0) -> str:
     }
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
-            response = await client.post(url, json=payload)
-            response.raise_for_status()
+            response = await _retrying_post(
+                client, url, json=payload, headers=_gemini_headers(),
+            )
         except httpx.HTTPError as exc:
-            raise _StreamError(f"Gemini completion failed: {exc}") from exc
+            raise _StreamError(f"Gemini completion failed: {_safe_http_msg(exc)}") from None
 
     data = response.json()
     candidates = data.get("candidates") or []
@@ -535,10 +627,9 @@ async def _grok_complete(messages: list[dict[str, str]]) -> str:
     }
     async with httpx.AsyncClient(timeout=120.0) as client:
         try:
-            r = await client.post(url, headers=headers, json=payload)
-            r.raise_for_status()
+            r = await _retrying_post(client, url, json=payload, headers=headers)
         except httpx.HTTPError as exc:
-            raise _StreamError(f"Grok plan call failed: {exc}") from exc
+            raise _StreamError(f"Grok plan call failed: {_safe_http_msg(exc)}") from None
     data = r.json()
     choices = data.get("choices") or []
     if not choices:
@@ -562,7 +653,6 @@ async def _gemini_complete_chat(messages: list[dict[str, str]]) -> str:
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
         f"{settings.GEMINI_LLM_MODEL}:generateContent"
-        f"?key={settings.GEMINI_API_KEY}"
     )
     payload: dict = {
         "contents": contents,
@@ -572,10 +662,11 @@ async def _gemini_complete_chat(messages: list[dict[str, str]]) -> str:
         payload["systemInstruction"] = {"parts": [{"text": system_text}]}
     async with httpx.AsyncClient(timeout=120.0) as client:
         try:
-            r = await client.post(url, json=payload)
-            r.raise_for_status()
+            r = await _retrying_post(
+                client, url, json=payload, headers=_gemini_headers(),
+            )
         except httpx.HTTPError as exc:
-            raise _StreamError(f"Gemini plan call failed: {exc}") from exc
+            raise _StreamError(f"Gemini plan call failed: {_safe_http_msg(exc)}") from None
     data = r.json()
     candidates = data.get("candidates") or []
     if not candidates:
@@ -1061,12 +1152,10 @@ async def probe_ollama() -> bool:
 
 
 async def probe_gemini() -> bool:
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models?key={settings.GEMINI_API_KEY}"
-    )
+    url = "https://generativelanguage.googleapis.com/v1beta/models"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(url)
+            r = await client.get(url, headers=_gemini_headers())
             return r.status_code == 200
     except httpx.HTTPError:
         return False
